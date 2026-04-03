@@ -11,7 +11,16 @@ import {
 import { HeatPoint } from '../../../../core/domain/models/match-summary.model';
 
 type Bounds = { minX: number; maxX: number; minY: number; maxY: number };
-type RadarMeta = { resolution: number; offset: { x: number; y: number } };
+type RadarMeta = {
+  resolution: number;
+  offset: { x: number; y: number };
+  splits: RadarSplit[];
+};
+type RadarSplit = {
+  bounds?: { top: number; bottom: number };
+  offset: { x: number; y: number };
+  zRange?: { min: number; max: number };
+};
 type RadarCrop = { left: number; top: number; width: number; height: number };
 
 const MAP_BOUNDS: Record<string, Bounds> = {
@@ -83,8 +92,9 @@ export class RadarMinimapComponent implements AfterViewInit, OnChanges {
 
       if (meta) {
         // Meta calibration is defined in a fixed 1024px radar space.
-        x = (point.x + meta.offset.x) / meta.resolution;
-        y = this.radarMetaBaseSize - (point.y + meta.offset.y) / meta.resolution;
+        const projected = this.projectWithRadarMeta(point, meta);
+        x = projected.x;
+        y = projected.y;
 
         if (crop) {
           x -= crop.left;
@@ -231,6 +241,7 @@ export class RadarMinimapComponent implements AfterViewInit, OnChanges {
           x: parsed.offset.x,
           y: parsed.offset.y,
         },
+        splits: this.parseRadarSplits(parsed.splits),
       });
     } catch {
       this.metaCache.set(mapKey, null);
@@ -245,6 +256,121 @@ export class RadarMinimapComponent implements AfterViewInit, OnChanges {
     const withoutLineComments = withoutBlockComments.replace(/(^|\s)\/\/.*$/gm, '$1');
     const withoutTrailingCommas = withoutLineComments.replace(/,\s*([}\]])/g, '$1');
     return JSON.parse(withoutTrailingCommas);
+  }
+
+  private projectWithRadarMeta(point: HeatPoint, meta: RadarMeta): { x: number; y: number } {
+    let x = (point.x + meta.offset.x) / meta.resolution;
+    let y = this.radarMetaBaseSize - (point.y + meta.offset.y) / meta.resolution;
+
+    const split = this.findMatchingSplit(point, meta.splits);
+    if (split) {
+      const offsetX = (split.offset.x / 100) * this.radarMetaBaseSize;
+      // Split offsets are expressed from bottom-left coordinates, while canvas uses top-left.
+      const offsetY = (split.offset.y / 100) * this.radarMetaBaseSize;
+      x += offsetX;
+      y -= offsetY;
+    }
+
+    return { x, y };
+  }
+
+  private findMatchingSplit(point: HeatPoint, splits: RadarSplit[]): RadarSplit | null {
+    if (!splits.length) {
+      return null;
+    }
+
+    const pointWithZ = point as HeatPoint & { z?: number };
+    const hasPointZ = typeof pointWithZ.z === 'number';
+
+    if (hasPointZ) {
+      for (const split of splits) {
+        if (this.matchesSplitZ(pointWithZ.z as number, split.zRange)) {
+          return split;
+        }
+      }
+    }
+
+    for (const split of splits) {
+      if (split.zRange) {
+        // If split has an explicit zRange but point has no z, skip bounds fallback to avoid false floor matches.
+        continue;
+      }
+
+      if (this.matchesSplitBounds(point.y, split.bounds)) {
+        return split;
+      }
+    }
+
+    return null;
+  }
+
+  private matchesSplitBounds(y: number, bounds?: { top: number; bottom: number }): boolean {
+    if (!bounds) {
+      return false;
+    }
+
+    const minY = Math.min(bounds.top, bounds.bottom);
+    const maxY = Math.max(bounds.top, bounds.bottom);
+    return y >= minY && y <= maxY;
+  }
+
+  private matchesSplitZ(z: number, zRange?: { min: number; max: number }): boolean {
+    if (!zRange) {
+      return false;
+    }
+
+    const minZ = Math.min(zRange.min, zRange.max);
+    const maxZ = Math.max(zRange.min, zRange.max);
+    return z >= minZ && z <= maxZ;
+  }
+
+  private parseRadarSplits(raw: unknown): RadarSplit[] {
+    if (!Array.isArray(raw)) {
+      return [];
+    }
+
+    const splits: RadarSplit[] = [];
+
+    for (const candidate of raw) {
+      if (!candidate || typeof candidate !== 'object') {
+        continue;
+      }
+
+      const value = candidate as {
+        bounds?: { top?: unknown; bottom?: unknown };
+        offset?: { x?: unknown; y?: unknown };
+        zRange?: { min?: unknown; max?: unknown };
+      };
+
+      if (!value.offset || typeof value.offset.x !== 'number' || typeof value.offset.y !== 'number') {
+        continue;
+      }
+
+      const split: RadarSplit = {
+        offset: {
+          x: value.offset.x,
+          y: value.offset.y,
+        },
+      };
+
+      if (value.bounds && typeof value.bounds.top === 'number' && typeof value.bounds.bottom === 'number') {
+        split.bounds = {
+          top: value.bounds.top,
+          bottom: value.bounds.bottom,
+        };
+      }
+
+      if (value.zRange && typeof value.zRange.min === 'number' && typeof value.zRange.max === 'number') {
+        split.zRange = {
+          min: value.zRange.min,
+          max: value.zRange.max,
+        };
+      }
+
+      splits.push(split);
+    }
+
+    return splits;
   }
 
   private computeRadarCrop(image: HTMLImageElement): RadarCrop | null {

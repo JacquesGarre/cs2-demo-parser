@@ -26,6 +26,7 @@ export interface PlayerSummary {
 export interface HeatPoint {
   x: number;
   y: number;
+  z?: number;
   count: number;
 }
 

@@ -20,6 +20,7 @@ type CS2DemoAnalyzer struct{}
 type heatBin struct {
 	x int
 	y int
+	z int
 }
 
 type playerAggregate struct {
@@ -227,7 +228,7 @@ func (a *CS2DemoAnalyzer) Analyze(demo entities.Demo) (entities.MatchSummary, er
 		}
 
 		victimAgg := upsertPlayer(players, e.Victim)
-		addBinnedPoint(victimAgg.DeathBins, float64(e.Victim.Position().X), float64(e.Victim.Position().Y))
+		addBinnedPoint(victimAgg.DeathBins, float64(e.Victim.Position().X), float64(e.Victim.Position().Y), float64(e.Victim.Position().Z))
 
 		if e.Killer == nil {
 			return
@@ -248,7 +249,7 @@ func (a *CS2DemoAnalyzer) Analyze(demo entities.Demo) (entities.MatchSummary, er
 			VictimName: safePlayerName(e.Victim),
 			Weapon:     killWeaponLabel(e),
 		})
-		addBinnedPoint(killerAgg.KillBins, float64(e.Victim.Position().X), float64(e.Victim.Position().Y))
+		addBinnedPoint(killerAgg.KillBins, float64(e.Victim.Position().X), float64(e.Victim.Position().Y), float64(e.Victim.Position().Z))
 		if e.IsHeadshot {
 			killerAgg.HeadshotKills++
 		}
@@ -600,12 +601,14 @@ func teamName(team common.Team) string {
 	}
 }
 
-func addBinnedPoint(target map[heatBin]int, x float64, y float64) {
+func addBinnedPoint(target map[heatBin]int, x float64, y float64, z float64) {
 	const gridSize = 64.0
+	const verticalGridSize = 64.0
 
 	key := heatBin{
 		x: int(math.Floor(x/gridSize) * gridSize),
 		y: int(math.Floor(y/gridSize) * gridSize),
+		z: int(math.Floor(z/verticalGridSize) * verticalGridSize),
 	}
 	target[key]++
 }
@@ -616,6 +619,7 @@ func binsToHeatPoints(items map[heatBin]int) []entities.HeatPoint {
 		points = append(points, entities.HeatPoint{
 			X:     float64(key.x),
 			Y:     float64(key.y),
+			Z:     float64(key.z),
 			Count: count,
 		})
 	}
@@ -623,6 +627,9 @@ func binsToHeatPoints(items map[heatBin]int) []entities.HeatPoint {
 	sort.Slice(points, func(i, j int) bool {
 		if points[i].Count == points[j].Count {
 			if points[i].X == points[j].X {
+				if points[i].Y == points[j].Y {
+					return points[i].Z < points[j].Z
+				}
 				return points[i].Y < points[j].Y
 			}
 			return points[i].X < points[j].X
