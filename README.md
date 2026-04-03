@@ -69,5 +69,5 @@ make local-clean   # Stop services and remove volumes
 - [ ] Add highlight video per round
 - [ ] Add round win-odds estimation based on buys
 - [ ] Add user accounts, team creation, store demos per team to get an average win %
-- [ ] Name tactics, and see the % of wins over maps and rounds
+- [ ] For teams, name tactics, and see the % of wins over maps and rounds
 - [ ] Wire faceit demos directly
