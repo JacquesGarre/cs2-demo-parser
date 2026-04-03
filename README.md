@@ -54,7 +54,7 @@ make local-clean   # Stop services and remove volumes
 - [x] Fix first opening of drawer not selecting the proper player in dropdown
 - [ ] Add ui tooltip over kills and death in radar to know which round and which side it happened
 - [ ] Add minimap replay per round with utility + kills animation (2D top-down)
-
+- [ ] Add more players stats in the drawer (multikills) et "rounds phares"
 
 ### Match Insights
 
