@@ -1,0 +1,30 @@
+:root {
+	color-scheme: light;
+}
+
+* {
+	box-sizing: border-box;
+}
+
+body {
+	margin: 0;
+	font-family: 'Segoe UI', 'Trebuchet MS', sans-serif;
+	color: #17314d;
+	background:
+		radial-gradient(circle at 15% 20%, rgba(17, 111, 175, 0.14), transparent 40%),
+		radial-gradient(circle at 88% 10%, rgba(210, 157, 89, 0.18), transparent 36%),
+		#eef4fb;
+}
+
+/* Map background images — global so Angular view encapsulation never interferes */
+.map-ancient  .map-header { background-image: url('/maps/de_ancient.png');  }
+.map-anubis   .map-header { background-image: url('/maps/de_anubis.png');   }
+.map-cache    .map-header { background-image: url('/maps/de_cache.png');    }
+.map-dust2    .map-header { background-image: url('/maps/de_dust2.png');    }
+.map-inferno  .map-header { background-image: url('/maps/de_inferno.png');  }
+.map-mirage   .map-header { background-image: url('/maps/de_mirage.png');   }
+.map-nuke     .map-header { background-image: url('/maps/de_nuke.png');     }
+.map-overpass .map-header { background-image: url('/maps/de_overpass.png'); }
+.map-train    .map-header { background-image: url('/maps/de_train.png');    }
+.map-vertigo  .map-header { background-image: url('/maps/de_vertigo.png');  }
+

@@ -1,0 +1,61 @@
+# OS files
+.DS_Store
+Thumbs.db
+
+# Editors / IDEs
+.idea/
+.vscode/*
+!.vscode/settings.json
+!.vscode/tasks.json
+!.vscode/launch.json
+!.vscode/extensions.json
+!.vscode/mcp.json
+*.swp
+*.swo
+
+# Environment / secrets
+.env
+.env.*
+!.env.example
+
+# Logs
+*.log
+npm-debug.log*
+yarn-error.log*
+pnpm-debug.log*
+
+# General build / cache
+coverage/
+dist/
+tmp/
+out/
+out-tsc/
+.cache/
+
+# Go (backend)
+backend/bin/
+backend/coverage.out
+backend/*.test
+*.exe
+*.dll
+*.so
+*.dylib
+
+# Python-style bytecode / notebooks (if used for analysis scripts)
+__pycache__/
+*.pyc
+.ipynb_checkpoints/
+
+# Node / Angular (frontend)
+frontend/node_modules/
+frontend/.angular/
+frontend/.sass-cache/
+frontend/coverage/
+frontend/dist/
+frontend/.cache/
+
+# Local uploads and demo artifacts
+backend/uploads/
+backend/*.dem
+uploads/
+*.dem

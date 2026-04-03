@@ -1,0 +1,32 @@
+<section class="upload">
+  <h1>CS2 Demo Intelligence</h1>
+  <p class="lead">Upload a CS2 GOTV .dem file and get deep player, team, duel, and spatial insights.</p>
+
+  <ng-container *ngIf="isUploading(); else uploadForm">
+    <div class="upload-spinner">
+      <div class="spinner-card">
+        <div class="spinner-icon">
+          <svg viewBox="0 0 48 48" fill="none" xmlns="http://www.w3.org/2000/svg">
+            <circle cx="24" cy="24" r="20" stroke="currentColor" stroke-width="3" stroke-dasharray="6 4" class="spin"/>
+            <path d="M16 24l5 5 11-11" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round" opacity="0.3"/>
+          </svg>
+        </div>
+        <h2>Uploading demo</h2>
+        <p class="spinner-status">{{ selectedFileName() }}</p>
+        <div class="progress-track">
+          <div class="progress-fill" [style.width.%]="uploadProgress()"></div>
+        </div>
+        <p class="progress-label">{{ uploadProgress() | number:'1.0-0' }}%</p>
+      </div>
+    </div>
+  </ng-container>
+
+  <ng-template #uploadForm>
+    <label class="upload-card">
+      <input type="file" accept=".dem" (change)="onFileSelected($event)" />
+      <span>{{ selectedFileName() || 'Choose a .dem file' }}</span>
+    </label>
+  </ng-template>
+
+  <p class="error" *ngIf="errorMessage()">{{ errorMessage() }}</p>
+</section>

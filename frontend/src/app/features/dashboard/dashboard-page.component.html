@@ -1,0 +1,293 @@
+<section class="dashboard">
+  <p class="error" *ngIf="errorMessage()">{{ errorMessage() }}</p>
+
+  <ng-container *ngIf="summary() as summaryData; else unifiedProgress">
+    <article class="scoreline" [ngClass]="normalizeMapKey(summaryData.mapName)">
+      <div class="map-header" #mapHeader>
+        <div class="map-name-overlay">
+          <p class="map-kicker">CS2 MATCH OVERVIEW</p>
+          <h2>{{ mapDisplayName(summaryData.mapName) }}</h2>
+          <p class="map-rounds">{{ summaryData.rounds }} rounds played</p>
+        </div>
+
+        <div class="score-container">
+          <p class="team-label">{{ summaryData.teamAName }}</p>
+          <div class="score-display">
+            <span class="team-score team-a">{{ teamAScore }}</span>
+            <span class="score-dash">:</span>
+            <span class="team-score team-b">{{ teamBScore }}</span>
+          </div>
+          <p class="team-label">{{ summaryData.teamBName }}</p>
+        </div>
+      </div>
+    </article>
+
+    <article class="players">
+      <h3>Matchup</h3>
+      <div class="matchup-grid">
+        <section class="team-column team-a-column">
+          <h4>{{ summaryData.teamAName }}</h4>
+          <div class="table-scroll">
+            <div class="team-table">
+              <div class="table-head table-row">
+                <span class="player-col">Player</span>
+                <span *ngFor="let column of statColumns">{{ column.label }}</span>
+              </div>
+              <button *ngFor="let player of teamAPlayers" class="table-row player-row" type="button" [class.active]="selectedPlayer()?.playerName === player.playerName" (click)="openPlayerBreakdown(player)">
+                <strong class="player-col">{{ player.playerName }}</strong>
+                <span *ngFor="let column of statColumns">{{ column.value(player) }}</span>
+              </button>
+            </div>
+          </div>
+        </section>
+
+        <section class="team-column team-b-column">
+          <h4>{{ summaryData.teamBName }}</h4>
+          <div class="table-scroll">
+            <div class="team-table">
+              <div class="table-head table-row">
+                <span class="player-col">Player</span>
+                <span *ngFor="let column of statColumns">{{ column.label }}</span>
+              </div>
+              <button *ngFor="let player of teamBPlayers" class="table-row player-row" type="button" [class.active]="selectedPlayer()?.playerName === player.playerName" (click)="openPlayerBreakdown(player)">
+                <strong class="player-col">{{ player.playerName }}</strong>
+                <span *ngFor="let column of statColumns">{{ column.value(player) }}</span>
+              </button>
+            </div>
+          </div>
+        </section>
+      </div>
+    </article>
+
+    <article class="round-history">
+      <h3>Round History</h3>
+      <div class="timeline-head">
+        <span>{{ summaryData.teamAName }}</span>
+        <span>{{ summaryData.teamBName }}</span>
+      </div>
+
+      <div class="timeline">
+        <section class="timeline-row" [class.halftime-row]="round.roundNumber === halftimeRound" *ngFor="let round of roundTimeline">
+          <article
+            class="round-node"
+            [class.left]="round.winnerSide === 'left'"
+            [class.right]="round.winnerSide === 'right'"
+            [class.center]="round.winnerSide === 'center'"
+            [class.win-t]="round.winnerRole === 'T'"
+            [class.win-ct]="round.winnerRole === 'CT'"
+          >
+            <header>
+              <strong>Round {{ round.roundNumber }}</strong>
+            </header>
+            <p class="mvp-player">MVP: {{ round.mvpLabel }}</p>
+            <div class="round-columns">
+              <section class="round-team-col team-a-round-col">
+                <div class="round-team-head">
+                  <strong>{{ summaryData.teamAName }}</strong>
+                  <span class="money-tooltip-wrap">
+                    <button class="money-chip economy-badge team-a-economy" type="button">{{ round.teamAEconomy }}</button>
+                    <span class="money-tooltip" role="tooltip">
+                      <strong>{{ summaryData.teamAName }} buy breakdown</strong>
+                      <span class="money-tooltip-empty" *ngIf="round.teamAMoneyDetails.length === 0">No player money data</span>
+                      <span class="money-tooltip-row" *ngFor="let entry of round.teamAMoneyDetails">
+                        <span class="money-tooltip-top">
+                          <span>{{ entry.playerName }}</span>
+                          <span>${{ entry.money.toLocaleString() }} - {{ entry.economy || 'Unknown' }}</span>
+                        </span>
+                        <span class="money-tooltip-meta">{{ entry.mainWeapon || 'Unknown weapon' }} | Util: {{ entry.utility ?? 0 }} | {{ entry.armor || 'No armor' }}</span>
+                      </span>
+                    </span>
+                  </span>
+                  <span class="side-badge team-a-side">{{ teamRoleForRound('TEAM A', round.roundNumber) }}</span>
+                </div>
+                <div class="awards" *ngIf="round.teamAMultiKills.length > 0">
+                  <span class="money-tooltip-wrap" *ngFor="let award of round.teamAMultiKills">
+                    <button class="multi-chip" type="button">{{ award.playerName }} {{ award.label }}</button>
+                    <span class="money-tooltip" role="tooltip">
+                      <strong>{{ award.playerName }} {{ award.label }} breakdown</strong>
+                      <span class="money-tooltip-empty" *ngIf="!award.killDetails || award.killDetails.length === 0">No kill details available</span>
+                      <span class="money-tooltip-row" *ngFor="let kill of award.killDetails">
+                        <span class="money-tooltip-top">
+                          <span>{{ kill.victimName }} killed with {{ kill.weapon }}</span>
+                        </span>
+                      </span>
+                    </span>
+                  </span>
+                </div>
+              </section>
+
+              <section class="round-team-col team-b-round-col">
+                <div class="round-team-head">
+                  <strong>{{ summaryData.teamBName }}</strong>
+                  <span class="money-tooltip-wrap">
+                    <button class="money-chip economy-badge team-b-economy" type="button">{{ round.teamBEconomy }}</button>
+                    <span class="money-tooltip" role="tooltip">
+                      <strong>{{ summaryData.teamBName }} buy breakdown</strong>
+                      <span class="money-tooltip-empty" *ngIf="round.teamBMoneyDetails.length === 0">No player money data</span>
+                      <span class="money-tooltip-row" *ngFor="let entry of round.teamBMoneyDetails">
+                        <span class="money-tooltip-top">
+                          <span>{{ entry.playerName }}</span>
+                          <span>${{ entry.money.toLocaleString() }} - {{ entry.economy || 'Unknown' }}</span>
+                        </span>
+                        <span class="money-tooltip-meta">{{ entry.mainWeapon || 'Unknown weapon' }} | Util: {{ entry.utility ?? 0 }} | {{ entry.armor || 'No armor' }}</span>
+                      </span>
+                    </span>
+                  </span>
+                  <span class="side-badge team-b-side">{{ teamRoleForRound('TEAM B', round.roundNumber) }}</span>
+                </div>
+                <div class="awards" *ngIf="round.teamBMultiKills.length > 0">
+                  <span class="money-tooltip-wrap" *ngFor="let award of round.teamBMultiKills">
+                    <button class="multi-chip" type="button">{{ award.playerName }} {{ award.label }}</button>
+                    <span class="money-tooltip" role="tooltip">
+                      <strong>{{ award.playerName }} {{ award.label }} breakdown</strong>
+                      <span class="money-tooltip-empty" *ngIf="!award.killDetails || award.killDetails.length === 0">No kill details available</span>
+                      <span class="money-tooltip-row" *ngFor="let kill of award.killDetails">
+                        <span class="money-tooltip-top">
+                          <span>{{ kill.victimName }} killed with {{ kill.weapon }}</span>
+                        </span>
+                      </span>
+                    </span>
+                  </span>
+                </div>
+              </section>
+            </div>
+            <footer class="round-winner">
+              {{ round.winner === 'TEAM A' ? summaryData.teamAName + ' won' : round.winner === 'TEAM B' ? summaryData.teamBName + ' won' : 'Winner unknown' }}
+            </footer>
+          </article>
+          <span class="round-index">{{ round.roundNumber }}</span>
+          <div class="half-marker" *ngIf="round.roundNumber === halftimeRound">
+            <div class="score-break score-break-halftime">
+              <p class="score-break-title">Side Swap</p>
+              <div class="score-break-grid">
+                <span class="score-break-team score-break-team-a">{{ summaryData.teamAName }}</span>
+                <span class="score-break-team score-break-team-b">{{ summaryData.teamBName }}</span>
+                <span class="score-break-value score-break-value-a">{{ halftimeTeamAScore }}</span>
+                <span class="score-break-divider" aria-hidden="true">|</span>
+                <span class="score-break-value score-break-value-b">{{ halftimeTeamBScore }}</span>
+              </div>
+            </div>
+          </div>
+        </section>
+
+        <footer class="timeline-footer">
+          <div class="score-break score-break-final">
+            <p class="score-break-title">Final Score</p>
+            <div class="score-break-grid">
+              <span class="score-break-team score-break-team-a">{{ summaryData.teamAName }}</span>
+              <span class="score-break-team score-break-team-b">{{ summaryData.teamBName }}</span>
+              <span class="score-break-value score-break-value-a">{{ teamAScore }}</span>
+              <span class="score-break-divider" aria-hidden="true">|</span>
+              <span class="score-break-value score-break-value-b">{{ teamBScore }}</span>
+            </div>
+          </div>
+        </footer>
+      </div>
+    </article>
+
+    <aside class="player-drawer" [class.open]="isPlayerDrawerOpen()" aria-label="Player match breakdown">
+      <header class="drawer-header">
+        <div>
+          <p class="drawer-kicker">Player Match Breakdown</p>
+          <div class="drawer-player-select-wrap" *ngIf="selectedPlayer() as player; else drawerHeaderPlaceholder">
+            <select
+              id="playerBreakdownSelect"
+              class="drawer-select drawer-select-header"
+              [value]="player.playerName"
+              (change)="setPlayerByName($any($event.target).value)"
+            >
+              <option *ngFor="let candidate of allPlayers" [value]="candidate.playerName">{{ candidate.playerName }}</option>
+            </select>
+            <span class="drawer-select-chevron" aria-hidden="true">v</span>
+          </div>
+          <ng-template #drawerHeaderPlaceholder>
+            <h3>Select a player</h3>
+          </ng-template>
+        </div>
+        <button type="button" class="drawer-close" (click)="closePlayerBreakdown()" aria-label="Close player breakdown">
+          <span aria-hidden="true">+</span>
+        </button>
+      </header>
+
+      <div class="drawer-content" *ngIf="selectedPlayer() as player; else drawerEmptyState">
+        <p class="drawer-team">{{ selectedPlayerTeamName(player) }}</p>
+
+        <div class="drawer-stat-grid">
+          <article class="drawer-stat-card">
+            <p>K / D / A</p>
+            <strong>{{ player.kills }}/{{ player.deaths }}/{{ player.assists }}</strong>
+          </article>
+          <article class="drawer-stat-card">
+            <p>KD</p>
+            <strong>{{ player.kdRatio.toFixed(2) }}</strong>
+          </article>
+          <article class="drawer-stat-card">
+            <p>ADR</p>
+            <strong>{{ player.adr.toFixed(1) }}</strong>
+          </article>
+          <article class="drawer-stat-card">
+            <p>HS%</p>
+            <strong>{{ player.hsPercentage.toFixed(1) }}%</strong>
+          </article>
+        </div>
+
+        <section class="damage-chart-card">
+          <div class="damage-chart-head">
+            <h4>Damage per Round</h4>
+            <p>Avg: {{ playerDamageAverage.toFixed(1) }} | Peak: {{ playerDamageMax }} dmg | Scale: 0-{{ matchDamageScaleMax }}</p>
+          </div>
+
+          <div class="damage-chart-canvas-wrap" *ngIf="playerDamageByRound.length > 0; else noDamageData">
+            <canvas #damageChartCanvas aria-label="Player damage per round chart"></canvas>
+          </div>
+
+          <ng-template #noDamageData>
+            <p class="damage-chart-empty">No round-by-round damage data available.</p>
+          </ng-template>
+        </section>
+
+        <section class="drawer-radar-block">
+          <div class="mode-toggle">
+            <button type="button" [class.active]="heatmapMode() === 'kills'" (click)="setHeatmapMode('kills')">Kills</button>
+            <button type="button" [class.active]="heatmapMode() === 'deaths'" (click)="setHeatmapMode('deaths')">Deaths</button>
+          </div>
+          <app-radar-minimap [mapName]="summaryData.mapName" [mode]="heatmapMode()" [points]="selectedHeatPoints"></app-radar-minimap>
+          <p class="heatmap-count">Events rendered: {{ selectedHeatPoints.length }}</p>
+        </section>
+      </div>
+
+      <ng-template #drawerEmptyState>
+        <div class="drawer-empty">
+          <p>Click any player row in Matchup to open their radar breakdown and match stats.</p>
+        </div>
+      </ng-template>
+    </aside>
+
+    <button
+      type="button"
+      class="drawer-backdrop"
+      *ngIf="isPlayerDrawerOpen()"
+      (click)="closePlayerBreakdown()"
+      aria-label="Close player breakdown backdrop"
+    ></button>
+  </ng-container>
+
+  <ng-template #unifiedProgress>
+    <div class="unified-progress">
+      <div class="progress-card">
+        <div class="progress-icon">
+          <svg viewBox="0 0 48 48" fill="none" xmlns="http://www.w3.org/2000/svg">
+            <circle cx="24" cy="24" r="20" stroke="currentColor" stroke-width="3" stroke-dasharray="6 4" class="spin"/>
+            <path d="M16 24l5 5 11-11" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round" opacity="0.3"/>
+          </svg>
+        </div>
+        <h2>Analyzing match</h2>
+        <p class="progress-subtext">{{ job()?.status === 'QUEUED' ? 'Waiting in queue…' : 'Parsing player data, kills, economy…' }}</p>
+        <div class="progress-track">
+          <div class="progress-fill" [style.width.%]="fakeProgress()"></div>
+        </div>
+        <p class="progress-label">{{ fakeProgress() | number:'1.0-0' }}%</p>
+      </div>
+    </div>
+  </ng-template>
+</section>
