@@ -55,6 +55,7 @@ make local-clean   # Stop services and remove volumes
 - [ ] Add ui tooltip over kills and death in radar to know which round and which side it happened
 - [ ] Add minimap replay per round with utility + kills animation (2D top-down)
 - [ ] Add more players stats in the drawer (multikills) et "rounds phares"
+- [ ] Add a 404 page, and why reloading the page doesn't work?
 
 ### Match Insights
 
