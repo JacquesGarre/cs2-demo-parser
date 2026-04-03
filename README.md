@@ -1,27 +1,71 @@
+# CS2 Demo Parser
 
+CS2 Demo Parser is a full-stack project to upload and analyze Counter-Strike 2 demos, then visualize match insights in a web dashboard. The stack includes:
 
-# TODOS
-- fix inferno radar minimap 
-- fix nuke 2-levels radar minimap
-- fix open drawer for first time doesn't select proper player in the dropdown
+- Backend API in Go
+- Frontend in Angular
+- PostgreSQL for persistence
+- Docker Compose orchestration, driven by Make targets
 
-- Replay of the minimap for each round, with the utils thrown animated and kills (as a 2d top-down view)
+## Local Setup
 
-- Player cards fifa style, with a rating, etc...
-- Deeper round analysis with a round timeline of events:
-   team A has avg $000 per player
-   team A goes for a {full buy} <- tooltip with player buy info details
-   Team A set up (if terro : 4 going b, 1 going short for instance) (classify as rush, execute, hold, fake, bet)
-   (Same for team B),
-   Then a timeline: 
-   ... died on short at 1:13
-   ... took an entry kill at 1:05
-   ... planted the bomb at 00:46
-   ... is in a clutch position at 00:40
-   ... saved his weapon 
-   ... defused the bomb
-   etc...
-(how the round ended b/a plant, defuse, etc..., where the most kills of the round happened (B/A/mid/short etc whatever the position is...), what was the t strategy, rush b, b execute, fake b rotate a, etc... how was the ct initial set up (1b 2a 2mid, etc...) (with a tooltip showing which ct player was where), if there was clutches /by who, entry frags/by who, trades etc... a little round timeline of events)
-- Highlight video of each player
-- Video highlight of each round
-- Odds of winning each round based on the team buy
+### Prerequisites
+
+- Git
+- Docker Desktop (or Docker Engine + Compose plugin)
+- GNU Make (`make`)
+
+### Start
+
+```bash
+git clone https://github.com/JacquesGarre/cs2-demo-parser.git
+cd cs2-demo-parser
+git checkout main
+make local-start
+```
+
+This builds and starts:
+
+- Postgres on `localhost:5432`
+- Backend API on `localhost:8080`
+- Frontend on `http://localhost:4200`
+
+## Local Development Commands
+
+Run from the project root:
+
+```bash
+make help          # List all targets
+make local-start   # Build and start postgres, backend, frontend
+make local-stop    # Stop and remove containers
+make local-restart # Restart all services
+make local-logs    # Follow service logs
+make local-ps      # Show running service status
+make local-rebuild # Force rebuild and restart
+make local-clean   # Stop services and remove volumes
+```
+
+## TODOs
+
+### UI / Radar
+
+- [ ] Fix Inferno radar minimap offset
+- [ ] Fix Nuke two-level radar minimap offset
+- [ ] Fix first opening of drawer not selecting the proper player in dropdown
+- [ ] Add minimap replay per round with utility + kills animation (2D top-down)
+
+### Match Insights
+
+- [ ] Add FIFA-style player cards with ratings
+- [ ] Add deeper round analysis with timeline:
+   - Team average money per player
+   - Buy type classification (with tooltip details)
+   - Team setup classification (rush, execute, hold, fake, etc.)
+   - Round event timeline (entries, plants, clutches, saves, defuses)
+   - Round ending context (plant/defuse/time), key fight zones, setups, clutches, entries, trades
+- [ ] Add highlight video per player
+- [ ] Add highlight video per round
+- [ ] Add round win-odds estimation based on buys
+- [ ] Add user accounts, team creation, store demos per team to get an average win %
+- [ ] Name tactics, and see the % of wins over maps and rounds
+- [ ] Wire faceit demos directly
