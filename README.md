@@ -51,7 +51,7 @@ make local-clean   # Stop services and remove volumes
 
 - [ ] Fix Inferno radar minimap offset
 - [x] Fix Nuke two-levels radar
-- [ ] Fix first opening of drawer not selecting the proper player in dropdown
+- [x] Fix first opening of drawer not selecting the proper player in dropdown
 - [ ] Add minimap replay per round with utility + kills animation (2D top-down)
 
 ### Match Insights

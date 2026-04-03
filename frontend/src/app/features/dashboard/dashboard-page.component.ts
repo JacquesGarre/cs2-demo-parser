@@ -57,6 +57,7 @@ export class DashboardPageComponent implements OnInit, AfterViewInit, OnDestroy 
   readonly job = signal<AnalysisJob | null>(null);
   readonly summary = signal<MatchSummary | null>(null);
   readonly selectedPlayer = signal<PlayerSummary | null>(null);
+  readonly selectedPlayerIndex = signal<number | null>(null);
   readonly isPlayerDrawerOpen = signal(false);
   readonly heatmapMode = signal<'kills' | 'deaths'>('kills');
   readonly errorMessage = signal('');
@@ -109,12 +110,12 @@ export class DashboardPageComponent implements OnInit, AfterViewInit, OnDestroy 
   }
 
   setPlayer(player: PlayerSummary): void {
-    this.selectedPlayer.set(player);
+    this.selectPlayer(player);
     this.queueDamageChartRender();
   }
 
   openPlayerBreakdown(player: PlayerSummary): void {
-    this.selectedPlayer.set(player);
+    this.selectPlayer(player);
     this.isPlayerDrawerOpen.set(true);
     this.queueDamageChartRender();
   }
@@ -130,8 +131,46 @@ export class DashboardPageComponent implements OnInit, AfterViewInit, OnDestroy 
     }
 
     const nextPlayer = summary.playerStats.find((player) => player.playerName === playerName) ?? null;
-    this.selectedPlayer.set(nextPlayer);
+    this.selectPlayer(nextPlayer);
     this.queueDamageChartRender();
+  }
+
+  setPlayerByIndex(indexValue: string): void {
+    const summary = this.summary();
+    if (!summary) {
+      return;
+    }
+
+    const parsedIndex = Number(indexValue);
+    if (Number.isInteger(parsedIndex) && parsedIndex >= 0 && parsedIndex < summary.playerStats.length) {
+      this.selectPlayer(summary.playerStats[parsedIndex]);
+      this.queueDamageChartRender();
+      return;
+    }
+
+    this.selectPlayer(null);
+    this.queueDamageChartRender();
+  }
+
+  private selectPlayer(player: PlayerSummary | null): void {
+    this.selectedPlayer.set(player);
+
+    if (!player) {
+      this.selectedPlayerIndex.set(null);
+      return;
+    }
+
+    const players = this.summary()?.playerStats ?? [];
+    const index = players.indexOf(player);
+    if (index >= 0) {
+      this.selectedPlayerIndex.set(index);
+      return;
+    }
+
+    const fallbackIndex = players.findIndex(
+      (candidate) => candidate.playerName === player.playerName && candidate.team === player.team,
+    );
+    this.selectedPlayerIndex.set(fallbackIndex >= 0 ? fallbackIndex : null);
   }
 
   get allPlayers(): PlayerSummary[] {
@@ -560,7 +599,7 @@ export class DashboardPageComponent implements OnInit, AfterViewInit, OnDestroy 
     this.getMatchSummary.execute(demoId).subscribe({
       next: (summary) => {
         this.summary.set(summary);
-        this.selectedPlayer.set(null);
+        this.selectPlayer(null);
         this.isPlayerDrawerOpen.set(false);
         this.destroyDamageChart();
         setTimeout(() => this.applyMapBackground());

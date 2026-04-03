@@ -193,10 +193,15 @@
             <select
               id="playerBreakdownSelect"
               class="drawer-select drawer-select-header"
-              [value]="player.playerName"
-              (change)="setPlayerByName($any($event.target).value)"
+              (change)="setPlayerByIndex($any($event.target).value)"
             >
-              <option *ngFor="let candidate of allPlayers" [value]="candidate.playerName">{{ candidate.playerName }}</option>
+              <option
+                *ngFor="let candidate of allPlayers; let idx = index"
+                [value]="idx"
+                [selected]="idx === selectedPlayerIndex()"
+              >
+                {{ candidate.playerName }}
+              </option>
             </select>
             <span class="drawer-select-chevron" aria-hidden="true">v</span>
           </div>
