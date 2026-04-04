@@ -53,13 +53,13 @@ make local-clean   # Stop services and remove volumes
 - [x] Fix first opening of drawer not selecting the proper player in dropdown
 - [x] Add ui tooltip over kills and death in radar to know which round and which side it happened, with the kill detail, who killed with which weapon, and which weapon the player who died had
 - [x] Add more players stats in the drawer (multikills) et "rounds phares"
-- [ ] Add a 404 page, and why reloading the page doesn't work?
+- [x] Add a 404 page, and why reloading the page doesn't work?
 - [ ] Add deeper round analysis with timeline:
    - Team setup classification (rush, execute, hold, fake, etc.)
    - Round event timeline (entries, plants, clutches, saves, defuses)
    - Round ending context (plant/defuse/time), key fight zones, setups, clutches, entries, trades
 - [ ] Add minimap replay per round with utility + kills animation (2D top-down)
-- [ ] Add FIFA-style player cards with ratings
+- [ ] Add FIFA-style player cards with ratings / Player classification compared to pros (Zywoo, donk, jame etc... with description of why)
 - [ ] Add highlight video per player
 - [ ] Add highlight video per round
 - [ ] Add round win-odds estimation based on buys

@@ -5,7 +5,7 @@
     <article class="scoreline" [ngClass]="normalizeMapKey(summaryData.mapName)">
       <div class="map-header" #mapHeader>
         <div class="map-name-overlay">
-          <p class="map-kicker">CS2 MATCH OVERVIEW</p>
+          <p class="map-kicker">POST-MATCH DEBRIEF</p>
           <h2>{{ mapDisplayName(summaryData.mapName) }}</h2>
           <p class="map-rounds">{{ summaryData.rounds }} rounds played</p>
         </div>
@@ -326,8 +326,8 @@
             <path d="M16 24l5 5 11-11" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round" opacity="0.3"/>
           </svg>
         </div>
-        <h2>Analyzing match</h2>
-        <p class="progress-subtext">{{ job()?.status === 'QUEUED' ? 'Waiting in queue…' : 'Parsing player data, kills, economy…' }}</p>
+        <h2>Review room warming up</h2>
+        <p class="progress-subtext">{{ job()?.status === 'QUEUED' ? 'Still in warmup — waiting in queue…' : 'Rewinding the tape: kills, economy, and radar spots…' }}</p>
         <div class="progress-track">
           <div class="progress-fill" [style.width.%]="fakeProgress()"></div>
         </div>
