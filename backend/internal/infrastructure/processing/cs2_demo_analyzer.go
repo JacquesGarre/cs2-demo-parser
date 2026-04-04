@@ -96,6 +96,7 @@ func (a *CS2DemoAnalyzer) Analyze(demo entities.Demo) (entities.MatchSummary, er
 	players := map[string]*playerAggregate{}
 	var ctTeamName, tTeamName string
 	var mapNameFromServerInfo string
+	calloutResolver := loadCalloutResolver(inferMapName(demo.FileName))
 
 	parser.RegisterNetMessageHandler(func(m *msg.CSVCMsg_ServerInfo) {
 		if m == nil {
@@ -104,6 +105,7 @@ func (a *CS2DemoAnalyzer) Analyze(demo entities.Demo) (entities.MatchSummary, er
 
 		if rawMap := strings.TrimSpace(m.GetMapName()); rawMap != "" {
 			mapNameFromServerInfo = normalizeMapName(rawMap)
+			calloutResolver = loadCalloutResolver(mapNameFromServerInfo)
 		}
 	})
 
@@ -240,7 +242,9 @@ func (a *CS2DemoAnalyzer) Analyze(demo entities.Demo) (entities.MatchSummary, er
 		state.RoundDamage[agg.ID] += e.HealthDamageTaken
 
 		if isNoteworthyDamage(e) {
-			state.RoundEvents = append(state.RoundEvents, newRoundEvent(
+			attackerLocation := calloutResolver.LabelForPlayer(e.Attacker)
+			targetLocation := calloutResolver.LabelForPlayer(e.Player)
+			event := newRoundEvent(
 				currentIngameTick(parser),
 				roundTimeLabel(parser, &state),
 				"damage",
@@ -258,8 +262,10 @@ func (a *CS2DemoAnalyzer) Analyze(demo entities.Demo) (entities.MatchSummary, er
 				e.HitGroup == events.HitGroupHead,
 				false,
 				false,
-				buildDamageEventDescription(e),
-			))
+				buildDamageEventDescription(e, attackerLocation, targetLocation),
+			)
+			applyEventLocationLabels(&event, targetLocation, attackerLocation, targetLocation)
+			state.RoundEvents = append(state.RoundEvents, event)
 		}
 	})
 
@@ -297,7 +303,8 @@ func (a *CS2DemoAnalyzer) Analyze(demo entities.Demo) (entities.MatchSummary, er
 		))
 
 		if e.Killer == nil {
-			state.RoundEvents = append(state.RoundEvents, newRoundEvent(
+			victimLocation := calloutResolver.LabelForPlayer(e.Victim)
+			event := newRoundEvent(
 				eventTick,
 				roundTimeLabel(parser, &state),
 				"kill",
@@ -315,8 +322,10 @@ func (a *CS2DemoAnalyzer) Analyze(demo entities.Demo) (entities.MatchSummary, er
 				false,
 				false,
 				false,
-				fmt.Sprintf("%s died to world damage", safePlayerName(e.Victim)),
-			))
+				fmt.Sprintf("%s died to world damage", formatPlayerLabelWithLocation(safePlayerName(e.Victim), victimLocation)),
+			)
+			applyEventLocationLabels(&event, victimLocation, "", victimLocation)
+			state.RoundEvents = append(state.RoundEvents, event)
 			return
 		}
 		if e.Killer.SteamID64 == e.Victim.SteamID64 {
@@ -362,7 +371,9 @@ func (a *CS2DemoAnalyzer) Analyze(demo entities.Demo) (entities.MatchSummary, er
 
 		isEntry := !state.OpeningTaken[state.CurrentRound]
 		isTrade := isTradeKill(state.RecentDeaths, eventTick, int(parser.TickRate()), e.Killer, e.Victim)
-		state.RoundEvents = append(state.RoundEvents, newRoundEvent(
+		killerLocation := calloutResolver.LabelForPlayer(e.Killer)
+		victimLocation := calloutResolver.LabelForPlayer(e.Victim)
+		event := newRoundEvent(
 			eventTick,
 			roundTimeLabel(parser, &state),
 			"kill",
@@ -380,13 +391,15 @@ func (a *CS2DemoAnalyzer) Analyze(demo entities.Demo) (entities.MatchSummary, er
 			e.IsHeadshot,
 			e.IsWallBang(),
 			e.ThroughSmoke,
-			buildKillEventDescription(e, isEntry, isTrade, assistantName),
-		))
+			buildKillEventDescription(e, isEntry, isTrade, assistantName, killerLocation, victimLocation),
+		)
+		applyEventLocationLabels(&event, victimLocation, killerLocation, victimLocation)
+		state.RoundEvents = append(state.RoundEvents, event)
 		state.RecentDeaths = appendPrunedRecentDeaths(state.RecentDeaths, recentDeathEvent{
-			KillerID: playerID(e.Killer),
-			VictimID: playerID(e.Victim),
+			KillerID:   playerID(e.Killer),
+			VictimID:   playerID(e.Victim),
 			VictimTeam: e.Victim.Team,
-			Tick: eventTick,
+			Tick:       eventTick,
 		}, eventTick, int(parser.TickRate()))
 
 		if !state.OpeningTaken[state.CurrentRound] {
@@ -454,7 +467,9 @@ func (a *CS2DemoAnalyzer) Analyze(demo entities.Demo) (entities.MatchSummary, er
 		if !state.ActiveRound {
 			return
 		}
-		state.RoundEvents = append(state.RoundEvents, newRoundEvent(
+		playerLocation := calloutResolver.LabelForPlayer(e.Player)
+		playerX, playerY, playerZ := playerPositionCoordinates(e.Player)
+		event := newRoundEvent(
 			currentIngameTick(parser),
 			roundTimeLabel(parser, &state),
 			"plant",
@@ -464,23 +479,27 @@ func (a *CS2DemoAnalyzer) Analyze(demo entities.Demo) (entities.MatchSummary, er
 			"",
 			"C4",
 			bombSiteLabel(e.Site),
-			0,
-			0,
-			0,
+			playerX,
+			playerY,
+			playerZ,
 			false,
 			false,
 			false,
 			false,
 			false,
-			buildBombEventDescription("starting plant", e.Player, e.Site),
-		))
+			buildBombEventDescription("starting plant", e.Player, e.Site, playerLocation),
+		)
+		applyEventLocationLabels(&event, playerLocation, playerLocation, "")
+		state.RoundEvents = append(state.RoundEvents, event)
 	})
 
 	parser.RegisterEventHandler(func(e events.BombPlanted) {
 		if !state.ActiveRound {
 			return
 		}
-		state.RoundEvents = append(state.RoundEvents, newRoundEvent(
+		playerLocation := calloutResolver.LabelForPlayer(e.Player)
+		playerX, playerY, playerZ := playerPositionCoordinates(e.Player)
+		event := newRoundEvent(
 			currentIngameTick(parser),
 			roundTimeLabel(parser, &state),
 			"plant",
@@ -490,16 +509,18 @@ func (a *CS2DemoAnalyzer) Analyze(demo entities.Demo) (entities.MatchSummary, er
 			"",
 			"C4",
 			bombSiteLabel(e.Site),
-			0,
-			0,
-			0,
+			playerX,
+			playerY,
+			playerZ,
 			false,
 			false,
 			false,
 			false,
 			false,
-			buildBombEventDescription("planted the bomb", e.Player, e.Site),
-		))
+			buildBombEventDescription("planted the bomb", e.Player, e.Site, playerLocation),
+		)
+		applyEventLocationLabels(&event, playerLocation, playerLocation, "")
+		state.RoundEvents = append(state.RoundEvents, event)
 	})
 
 	parser.RegisterEventHandler(func(e events.BombDefuseStart) {
@@ -510,7 +531,9 @@ func (a *CS2DemoAnalyzer) Analyze(demo entities.Demo) (entities.MatchSummary, er
 		if e.HasKit {
 			kitLabel = " with a kit"
 		}
-		state.RoundEvents = append(state.RoundEvents, newRoundEvent(
+		playerLocation := calloutResolver.LabelForPlayer(e.Player)
+		playerX, playerY, playerZ := playerPositionCoordinates(e.Player)
+		event := newRoundEvent(
 			currentIngameTick(parser),
 			roundTimeLabel(parser, &state),
 			"defuse",
@@ -520,23 +543,27 @@ func (a *CS2DemoAnalyzer) Analyze(demo entities.Demo) (entities.MatchSummary, er
 			"",
 			"Defuse kit",
 			"",
-			0,
-			0,
-			0,
+			playerX,
+			playerY,
+			playerZ,
 			false,
 			false,
 			false,
 			false,
 			false,
-			fmt.Sprintf("%s started defusing%s", safePlayerName(e.Player), kitLabel),
-		))
+			fmt.Sprintf("%s started defusing%s", formatPlayerLabelWithLocation(safePlayerName(e.Player), playerLocation), kitLabel),
+		)
+		applyEventLocationLabels(&event, playerLocation, playerLocation, "")
+		state.RoundEvents = append(state.RoundEvents, event)
 	})
 
 	parser.RegisterEventHandler(func(e events.BombDefused) {
 		if !state.ActiveRound {
 			return
 		}
-		state.RoundEvents = append(state.RoundEvents, newRoundEvent(
+		playerLocation := calloutResolver.LabelForPlayer(e.Player)
+		playerX, playerY, playerZ := playerPositionCoordinates(e.Player)
+		event := newRoundEvent(
 			currentIngameTick(parser),
 			roundTimeLabel(parser, &state),
 			"defuse",
@@ -546,23 +573,27 @@ func (a *CS2DemoAnalyzer) Analyze(demo entities.Demo) (entities.MatchSummary, er
 			"",
 			"C4",
 			bombSiteLabel(e.Site),
-			0,
-			0,
-			0,
+			playerX,
+			playerY,
+			playerZ,
 			false,
 			false,
 			false,
 			false,
 			false,
-			buildBombEventDescription("defused the bomb", e.Player, e.Site),
-		))
+			buildBombEventDescription("defused the bomb", e.Player, e.Site, playerLocation),
+		)
+		applyEventLocationLabels(&event, playerLocation, playerLocation, "")
+		state.RoundEvents = append(state.RoundEvents, event)
 	})
 
 	parser.RegisterEventHandler(func(e events.BombExplode) {
 		if !state.ActiveRound {
 			return
 		}
-		state.RoundEvents = append(state.RoundEvents, newRoundEvent(
+		playerLocation := calloutResolver.LabelForPlayer(e.Player)
+		playerX, playerY, playerZ := playerPositionCoordinates(e.Player)
+		event := newRoundEvent(
 			currentIngameTick(parser),
 			roundTimeLabel(parser, &state),
 			"bomb",
@@ -572,23 +603,27 @@ func (a *CS2DemoAnalyzer) Analyze(demo entities.Demo) (entities.MatchSummary, er
 			"",
 			"C4",
 			bombSiteLabel(e.Site),
-			0,
-			0,
-			0,
+			playerX,
+			playerY,
+			playerZ,
 			false,
 			false,
 			false,
 			false,
 			false,
-			buildBombEventDescription("detonated the bomb", e.Player, e.Site),
-		))
+			buildBombEventDescription("detonated the bomb", e.Player, e.Site, playerLocation),
+		)
+		applyEventLocationLabels(&event, playerLocation, playerLocation, "")
+		state.RoundEvents = append(state.RoundEvents, event)
 	})
 
 	parser.RegisterEventHandler(func(e events.BombDropped) {
 		if !state.ActiveRound {
 			return
 		}
-		state.RoundEvents = append(state.RoundEvents, newRoundEvent(
+		playerLocation := calloutResolver.LabelForPlayer(e.Player)
+		playerX, playerY, playerZ := playerPositionCoordinates(e.Player)
+		event := newRoundEvent(
 			currentIngameTick(parser),
 			roundTimeLabel(parser, &state),
 			"bomb",
@@ -598,23 +633,27 @@ func (a *CS2DemoAnalyzer) Analyze(demo entities.Demo) (entities.MatchSummary, er
 			"",
 			"C4",
 			"",
-			0,
-			0,
-			0,
+			playerX,
+			playerY,
+			playerZ,
 			false,
 			false,
 			false,
 			false,
 			false,
-			fmt.Sprintf("%s dropped the bomb", safePlayerName(e.Player)),
-		))
+			fmt.Sprintf("%s dropped the bomb", formatPlayerLabelWithLocation(safePlayerName(e.Player), playerLocation)),
+		)
+		applyEventLocationLabels(&event, playerLocation, playerLocation, "")
+		state.RoundEvents = append(state.RoundEvents, event)
 	})
 
 	parser.RegisterEventHandler(func(e events.BombPickup) {
 		if !state.ActiveRound {
 			return
 		}
-		state.RoundEvents = append(state.RoundEvents, newRoundEvent(
+		playerLocation := calloutResolver.LabelForPlayer(e.Player)
+		playerX, playerY, playerZ := playerPositionCoordinates(e.Player)
+		event := newRoundEvent(
 			currentIngameTick(parser),
 			roundTimeLabel(parser, &state),
 			"bomb",
@@ -624,16 +663,18 @@ func (a *CS2DemoAnalyzer) Analyze(demo entities.Demo) (entities.MatchSummary, er
 			"",
 			"C4",
 			"",
-			0,
-			0,
-			0,
+			playerX,
+			playerY,
+			playerZ,
 			false,
 			false,
 			false,
 			false,
 			false,
-			fmt.Sprintf("%s picked up the bomb", safePlayerName(e.Player)),
-		))
+			fmt.Sprintf("%s picked up the bomb", formatPlayerLabelWithLocation(safePlayerName(e.Player), playerLocation)),
+		)
+		applyEventLocationLabels(&event, playerLocation, playerLocation, "")
+		state.RoundEvents = append(state.RoundEvents, event)
 	})
 
 	parser.RegisterEventHandler(func(e events.PlayerFlashed) {
@@ -646,7 +687,10 @@ func (a *CS2DemoAnalyzer) Analyze(demo entities.Demo) (entities.MatchSummary, er
 		if e.FlashDuration() < 1500*time.Millisecond {
 			return
 		}
-		state.RoundEvents = append(state.RoundEvents, newRoundEvent(
+		attackerLocation := calloutResolver.LabelForPlayer(e.Attacker)
+		targetLocation := calloutResolver.LabelForPlayer(e.Player)
+		targetX, targetY, targetZ := playerPositionCoordinates(e.Player)
+		event := newRoundEvent(
 			currentIngameTick(parser),
 			roundTimeLabel(parser, &state),
 			"utility",
@@ -656,23 +700,27 @@ func (a *CS2DemoAnalyzer) Analyze(demo entities.Demo) (entities.MatchSummary, er
 			"",
 			"Flashbang",
 			"",
-			0,
-			0,
-			0,
+			targetX,
+			targetY,
+			targetZ,
 			false,
 			false,
 			false,
 			false,
 			false,
-			fmt.Sprintf("%s flashed %s for %.1fs", safePlayerName(e.Attacker), safePlayerName(e.Player), e.FlashDuration().Seconds()),
-		))
+			fmt.Sprintf("%s flashed %s for %.1fs", formatPlayerLabelWithLocation(safePlayerName(e.Attacker), attackerLocation), formatPlayerLabelWithLocation(safePlayerName(e.Player), targetLocation), e.FlashDuration().Seconds()),
+		)
+		applyEventLocationLabels(&event, targetLocation, attackerLocation, targetLocation)
+		state.RoundEvents = append(state.RoundEvents, event)
 	})
 
 	parser.RegisterEventHandler(func(e events.SmokeStart) {
 		if !state.ActiveRound {
 			return
 		}
-		state.RoundEvents = append(state.RoundEvents, newRoundEvent(
+		throwerLocation := calloutResolver.LabelForPlayer(e.Thrower)
+		landingLocation := calloutResolver.LabelForPosition(float64(e.Position.X), float64(e.Position.Y), float64(e.Position.Z))
+		event := newRoundEvent(
 			currentIngameTick(parser),
 			roundTimeLabel(parser, &state),
 			"utility",
@@ -690,15 +738,19 @@ func (a *CS2DemoAnalyzer) Analyze(demo entities.Demo) (entities.MatchSummary, er
 			false,
 			false,
 			false,
-			buildGrenadeEventDescription("bloomed", e.Thrower, grenadeTypeLabel(e.GrenadeType, "Smoke")),
-		))
+			buildGrenadeEventDescription("bloomed", e.Thrower, grenadeTypeLabel(e.GrenadeType, "Smoke"), throwerLocation, landingLocation),
+		)
+		applyEventLocationLabels(&event, landingLocation, throwerLocation, "")
+		state.RoundEvents = append(state.RoundEvents, event)
 	})
 
 	parser.RegisterEventHandler(func(e events.HeExplode) {
 		if !state.ActiveRound {
 			return
 		}
-		state.RoundEvents = append(state.RoundEvents, newRoundEvent(
+		throwerLocation := calloutResolver.LabelForPlayer(e.Thrower)
+		landingLocation := calloutResolver.LabelForPosition(float64(e.Position.X), float64(e.Position.Y), float64(e.Position.Z))
+		event := newRoundEvent(
 			currentIngameTick(parser),
 			roundTimeLabel(parser, &state),
 			"utility",
@@ -716,15 +768,19 @@ func (a *CS2DemoAnalyzer) Analyze(demo entities.Demo) (entities.MatchSummary, er
 			false,
 			false,
 			false,
-			buildGrenadeEventDescription("exploded", e.Thrower, grenadeTypeLabel(e.GrenadeType, "HE Grenade")),
-		))
+			buildGrenadeEventDescription("exploded", e.Thrower, grenadeTypeLabel(e.GrenadeType, "HE Grenade"), throwerLocation, landingLocation),
+		)
+		applyEventLocationLabels(&event, landingLocation, throwerLocation, "")
+		state.RoundEvents = append(state.RoundEvents, event)
 	})
 
 	parser.RegisterEventHandler(func(e events.FlashExplode) {
 		if !state.ActiveRound {
 			return
 		}
-		state.RoundEvents = append(state.RoundEvents, newRoundEvent(
+		throwerLocation := calloutResolver.LabelForPlayer(e.Thrower)
+		landingLocation := calloutResolver.LabelForPosition(float64(e.Position.X), float64(e.Position.Y), float64(e.Position.Z))
+		event := newRoundEvent(
 			currentIngameTick(parser),
 			roundTimeLabel(parser, &state),
 			"utility",
@@ -742,8 +798,10 @@ func (a *CS2DemoAnalyzer) Analyze(demo entities.Demo) (entities.MatchSummary, er
 			false,
 			false,
 			false,
-			buildGrenadeEventDescription("popped", e.Thrower, grenadeTypeLabel(e.GrenadeType, "Flashbang")),
-		))
+			buildGrenadeEventDescription("popped", e.Thrower, grenadeTypeLabel(e.GrenadeType, "Flashbang"), throwerLocation, landingLocation),
+		)
+		applyEventLocationLabels(&event, landingLocation, throwerLocation, "")
+		state.RoundEvents = append(state.RoundEvents, event)
 	})
 
 	if err := parser.ParseToEnd(); err != nil {
@@ -1267,22 +1325,34 @@ func grenadeTypeLabel(grenadeType common.EquipmentType, fallback string) string 
 	return name
 }
 
-func buildBombEventDescription(action string, player *common.Player, site events.Bombsite) string {
+func buildBombEventDescription(action string, player *common.Player, site events.Bombsite, playerLocation string) string {
+	actorLabel := formatPlayerLabelWithLocation(safePlayerName(player), playerLocation)
 	siteLabel := bombSiteLabel(site)
 	if siteLabel != "" {
-		return fmt.Sprintf("%s %s on %s", safePlayerName(player), action, siteLabel)
+		return fmt.Sprintf("%s %s on %s", actorLabel, action, siteLabel)
 	}
-	return fmt.Sprintf("%s %s", safePlayerName(player), action)
+	return fmt.Sprintf("%s %s", actorLabel, action)
 }
 
-func buildGrenadeEventDescription(action string, thrower *common.Player, grenade string) string {
+func buildGrenadeEventDescription(action string, thrower *common.Player, grenade string, throwerLocation string, landingLocation string) string {
 	if thrower == nil {
+		if landingLocation != "" {
+			return fmt.Sprintf("%s at %s", action, landingLocation)
+		}
 		return action
 	}
+
+	throwerLabel := formatPlayerLabelWithLocation(safePlayerName(thrower), throwerLocation)
 	if grenade == "" {
-		return fmt.Sprintf("%s %s", safePlayerName(thrower), action)
+		if landingLocation != "" {
+			return fmt.Sprintf("%s %s at %s", throwerLabel, action, landingLocation)
+		}
+		return fmt.Sprintf("%s %s", throwerLabel, action)
 	}
-	return fmt.Sprintf("%s threw a %s that %s", safePlayerName(thrower), grenade, action)
+	if landingLocation != "" {
+		return fmt.Sprintf("%s threw a %s that %s at %s", throwerLabel, grenade, action, landingLocation)
+	}
+	return fmt.Sprintf("%s threw a %s that %s", throwerLabel, grenade, action)
 }
 
 func roundEndReasonLabel(reason events.RoundEndReason, winner common.Team) string {
@@ -1641,15 +1711,17 @@ func isNoteworthyDamage(e events.PlayerHurt) bool {
 	return e.HitGroup == events.HitGroupHead
 }
 
-func buildDamageEventDescription(e events.PlayerHurt) string {
-	text := fmt.Sprintf("%s hit %s for %d damage with %s", safePlayerName(e.Attacker), safePlayerName(e.Player), e.HealthDamageTaken, hurtWeaponLabel(e))
+func buildDamageEventDescription(e events.PlayerHurt, attackerLocation string, targetLocation string) string {
+	attackerLabel := formatPlayerLabelWithLocation(safePlayerName(e.Attacker), attackerLocation)
+	targetLabel := formatPlayerLabelWithLocation(safePlayerName(e.Player), targetLocation)
+	text := fmt.Sprintf("%s hit %s for %d damage with %s", attackerLabel, targetLabel, e.HealthDamageTaken, hurtWeaponLabel(e))
 	if e.HitGroup == events.HitGroupHead {
 		text += " (headshot)"
 	}
 	return text
 }
 
-func buildKillEventDescription(e events.Kill, isEntry bool, isTrade bool, assistantName string) string {
+func buildKillEventDescription(e events.Kill, isEntry bool, isTrade bool, assistantName string, killerLocation string, victimLocation string) string {
 	action := "eliminated"
 	switch {
 	case isEntry:
@@ -1658,7 +1730,9 @@ func buildKillEventDescription(e events.Kill, isEntry bool, isTrade bool, assist
 		action = "traded"
 	}
 
-	text := fmt.Sprintf("%s %s %s with %s", safePlayerName(e.Killer), action, safePlayerName(e.Victim), killWeaponLabel(e))
+	killerLabel := formatPlayerLabelWithLocation(safePlayerName(e.Killer), killerLocation)
+	victimLabel := formatPlayerLabelWithLocation(safePlayerName(e.Victim), victimLocation)
+	text := fmt.Sprintf("%s %s %s with %s", killerLabel, action, victimLabel, killWeaponLabel(e))
 	extra := make([]string, 0, 5)
 	if e.IsHeadshot {
 		extra = append(extra, "headshot")

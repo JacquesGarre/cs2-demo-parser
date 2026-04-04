@@ -1,0 +1,59 @@
+{
+  "generatedAt": "2026-04-04T18:17:49.549Z",
+  "maps": [
+    {
+      "map": "ancient",
+      "sourceFile": "decompiled_maps\\ancient\\maps\\de_ancient.vmap",
+      "calloutCount": 18,
+      "warnings": 0
+    },
+    {
+      "map": "anubis",
+      "sourceFile": "decompiled_maps\\anubis\\maps\\de_anubis.vmap",
+      "calloutCount": 62,
+      "warnings": 0
+    },
+    {
+      "map": "dust2",
+      "sourceFile": "decompiled_maps\\dust2\\maps\\de_dust2.vmap",
+      "calloutCount": 43,
+      "warnings": 0
+    },
+    {
+      "map": "inferno",
+      "sourceFile": "decompiled_maps\\inferno\\maps\\de_inferno.vmap",
+      "calloutCount": 46,
+      "warnings": 0
+    },
+    {
+      "map": "mirage",
+      "sourceFile": "decompiled_maps\\mirage\\maps\\de_mirage.vmap",
+      "calloutCount": 23,
+      "warnings": 0
+    },
+    {
+      "map": "nuke",
+      "sourceFile": "decompiled_maps\\nuke\\maps\\de_nuke.vmap",
+      "calloutCount": 58,
+      "warnings": 0
+    },
+    {
+      "map": "overpass",
+      "sourceFile": "decompiled_maps\\overpass\\maps\\de_overpass.vmap",
+      "calloutCount": 26,
+      "warnings": 0
+    },
+    {
+      "map": "train",
+      "sourceFile": "decompiled_maps\\train\\maps\\de_train.vmap",
+      "calloutCount": 26,
+      "warnings": 0
+    },
+    {
+      "map": "vertigo",
+      "sourceFile": "decompiled_maps\\vertigo\\maps\\de_vertigo.vmap",
+      "calloutCount": 50,
+      "warnings": 0
+    }
+  ]
+}

@@ -90,6 +90,8 @@ export interface RoundEvent {
   ctWinProbability?: number;
   tWinProbability?: number;
   locationLabel?: string;
+  actorLocationLabel?: string;
+  targetLocationLabel?: string;
   x?: number;
   y?: number;
   z?: number;

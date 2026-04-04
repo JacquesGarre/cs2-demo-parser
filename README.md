@@ -54,6 +54,7 @@ make local-clean   # Stop services and remove volumes
 - [x] Add ui tooltip over kills and death in radar to know which round and which side it happened, with the kill detail, who killed with which weapon, and which weapon the player who died had
 - [x] Add more players stats in the drawer (multikills) et "rounds phares"
 - [x] Add a 404 page, and why reloading the page doesn't work?
+- [x] Add callout for each event
 - [ ] Add minimap replay per round with utility + kills animation (2D top-down)
 - [ ] Add FIFA-style player cards with ratings / Player classification compared to pros (Zywoo, donk, jame etc... with description of why)
 - [ ] Add highlight video per player
@@ -64,4 +65,4 @@ make local-clean   # Stop services and remove volumes
 - [ ] What was well done, and areas of improvement for each team (B ct hold, B terro rush etc...)
 - [ ] Same for every player in the player drawer
 
-- [ ] Add human position for each event
+

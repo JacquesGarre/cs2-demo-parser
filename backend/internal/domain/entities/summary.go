@@ -78,28 +78,30 @@ type RoundPlayerMoney struct {
 }
 
 type RoundEvent struct {
-	Tick          int     `json:"tick"`
-	TimeLabel     string  `json:"timeLabel,omitempty"`
-	EventType     string  `json:"eventType"`
-	Description   string  `json:"description"`
-	Team          string  `json:"team,omitempty"`
-	ActorName     string  `json:"actorName,omitempty"`
-	TargetName    string  `json:"targetName,omitempty"`
-	AssistantName string  `json:"assistantName,omitempty"`
-	Weapon        string  `json:"weapon,omitempty"`
-	Site             string  `json:"site,omitempty"`
-	MatchState       string  `json:"matchState,omitempty"`
-	CTWinProbability int     `json:"ctWinProbability"`
-	TWinProbability  int     `json:"tWinProbability"`
-	LocationLabel    string  `json:"locationLabel,omitempty"`
-	X             float64 `json:"x,omitempty"`
-	Y             float64 `json:"y,omitempty"`
-	Z             float64 `json:"z,omitempty"`
-	IsEntry       bool    `json:"isEntry,omitempty"`
-	IsTrade       bool    `json:"isTrade,omitempty"`
-	IsHeadshot    bool    `json:"isHeadshot,omitempty"`
-	IsWallbang    bool    `json:"isWallbang,omitempty"`
-	ThroughSmoke  bool    `json:"throughSmoke,omitempty"`
+	Tick                int     `json:"tick"`
+	TimeLabel           string  `json:"timeLabel,omitempty"`
+	EventType           string  `json:"eventType"`
+	Description         string  `json:"description"`
+	Team                string  `json:"team,omitempty"`
+	ActorName           string  `json:"actorName,omitempty"`
+	TargetName          string  `json:"targetName,omitempty"`
+	AssistantName       string  `json:"assistantName,omitempty"`
+	Weapon              string  `json:"weapon,omitempty"`
+	Site                string  `json:"site,omitempty"`
+	MatchState          string  `json:"matchState,omitempty"`
+	CTWinProbability    int     `json:"ctWinProbability"`
+	TWinProbability     int     `json:"tWinProbability"`
+	LocationLabel       string  `json:"locationLabel,omitempty"`
+	ActorLocationLabel  string  `json:"actorLocationLabel,omitempty"`
+	TargetLocationLabel string  `json:"targetLocationLabel,omitempty"`
+	X                   float64 `json:"x,omitempty"`
+	Y                   float64 `json:"y,omitempty"`
+	Z                   float64 `json:"z,omitempty"`
+	IsEntry             bool    `json:"isEntry,omitempty"`
+	IsTrade             bool    `json:"isTrade,omitempty"`
+	IsHeadshot          bool    `json:"isHeadshot,omitempty"`
+	IsWallbang          bool    `json:"isWallbang,omitempty"`
+	ThroughSmoke        bool    `json:"throughSmoke,omitempty"`
 }
 
 type RoundSummary struct {
