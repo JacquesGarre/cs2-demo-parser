@@ -183,6 +183,7 @@
                       <div class="round-event-body">
                         <p>{{ event.description }}</p>
                         <div class="round-event-tags">
+                          <span class="round-event-state" *ngIf="event.matchState">{{ event.matchState }}</span>
                           <span>{{ event.eventType | titlecase }}</span>
                           <span *ngIf="event.site">Site {{ event.site }}</span>
                           <span *ngIf="event.isEntry">Entry</span>

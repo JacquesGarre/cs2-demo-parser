@@ -88,6 +88,7 @@ type RoundEvent struct {
 	AssistantName string  `json:"assistantName,omitempty"`
 	Weapon        string  `json:"weapon,omitempty"`
 	Site          string  `json:"site,omitempty"`
+	MatchState    string  `json:"matchState,omitempty"`
 	LocationLabel string  `json:"locationLabel,omitempty"`
 	X             float64 `json:"x,omitempty"`
 	Y             float64 `json:"y,omitempty"`

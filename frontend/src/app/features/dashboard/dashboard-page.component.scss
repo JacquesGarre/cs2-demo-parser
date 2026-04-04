@@ -1207,6 +1207,18 @@
   font-weight: 700;
 }
 
+.round-event-state {
+  background: rgba(28, 88, 139, 0.12) !important;
+  color: #1c5d92 !important;
+  font-variant-numeric: tabular-nums;
+  letter-spacing: 0.03em;
+}
+
+.round-event--team-b .round-event-state {
+  background: rgba(202, 104, 26, 0.12) !important;
+  color: #9a4b10 !important;
+}
+
 .round-event--kill {
   border-color: rgba(121, 181, 228, 0.65);
 }

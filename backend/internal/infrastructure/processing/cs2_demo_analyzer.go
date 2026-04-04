@@ -413,7 +413,7 @@ func (a *CS2DemoAnalyzer) Analyze(demo entities.Demo) (entities.MatchSummary, er
 			Reason:     mvpReasonLabel(e.Reason),
 		}
 		applyRoundMVPStats(lastRound, lastRound.MVP)
-		lastRound.Events = append(lastRound.Events, newRoundEvent(
+		mvpEvent := newRoundEvent(
 			currentIngameTick(parser),
 			roundTimeLabel(parser, &state),
 			"mvp",
@@ -432,7 +432,12 @@ func (a *CS2DemoAnalyzer) Analyze(demo entities.Demo) (entities.MatchSummary, er
 			false,
 			false,
 			fmt.Sprintf("Round MVP awarded to %s (%s)", aggregate.PlayerName, mvpReasonLabel(e.Reason)),
-		))
+		)
+		mvpEvent.MatchState = currentMatchStateLabel(parser)
+		if mvpEvent.MatchState == "" && len(lastRound.Events) > 0 {
+			mvpEvent.MatchState = lastRound.Events[len(lastRound.Events)-1].MatchState
+		}
+		lastRound.Events = append(lastRound.Events, mvpEvent)
 		sortRoundEventsInPlace(lastRound.Events)
 	})
 
@@ -1151,6 +1156,36 @@ func currentIngameTick(parser demoinfocs.Parser) int {
 	return gameState.IngameTick()
 }
 
+func currentMatchStateLabel(parser demoinfocs.Parser) string {
+	gameState := parser.GameState()
+	if gameState == nil {
+		return ""
+	}
+
+	ctAlive := countAlivePlayers(gameState.TeamCounterTerrorists())
+	tAlive := countAlivePlayers(gameState.TeamTerrorists())
+	if ctAlive == 0 && tAlive == 0 {
+		return ""
+	}
+
+	return formatMatchStateLabel(tAlive, ctAlive)
+}
+
+func countAlivePlayers(teamState *common.TeamState) int {
+	if teamState == nil {
+		return 0
+	}
+
+	count := 0
+	for _, player := range teamState.Members() {
+		if player == nil || player.IsUnknown || !player.IsAlive() {
+			continue
+		}
+		count++
+	}
+	return count
+}
+
 func roundTimeLabel(parser demoinfocs.Parser, state *roundState) string {
 	return formatRoundClock(state.LiveStartTick, currentIngameTick(parser), parser.TickRate())
 }
@@ -1276,6 +1311,48 @@ func buildRoundEndDescription(winner common.Team, reason events.RoundEndReason) 
 		return fmt.Sprintf("%s won the round", winnerLabel)
 	}
 	return fmt.Sprintf("%s won the round (%s)", winnerLabel, reasonLabel)
+}
+
+func formatMatchStateLabel(tAlive int, ctAlive int) string {
+	if tAlive < 0 {
+		tAlive = 0
+	}
+	if ctAlive < 0 {
+		ctAlive = 0
+	}
+	return fmt.Sprintf("T %dv%d CT", tAlive, ctAlive)
+}
+
+func annotateRoundEventsWithMatchState(events []entities.RoundEvent, ctPlayers int, tPlayers int) {
+	if len(events) == 0 {
+		return
+	}
+	if ctPlayers <= 0 {
+		ctPlayers = 5
+	}
+	if tPlayers <= 0 {
+		tPlayers = 5
+	}
+
+	ctAlive := ctPlayers
+	tAlive := tPlayers
+	sortRoundEventsInPlace(events)
+
+	for i := range events {
+		if events[i].EventType == "kill" {
+			switch events[i].Team {
+			case "T":
+				if ctAlive > 0 {
+					ctAlive--
+				}
+			case "CT":
+				if tAlive > 0 {
+					tAlive--
+				}
+			}
+		}
+		events[i].MatchState = formatMatchStateLabel(tAlive, ctAlive)
+	}
 }
 
 func isNoteworthyDamage(e events.PlayerHurt) bool {
@@ -1524,6 +1601,9 @@ func commitRoundAwards(state *roundState, players map[string]*playerAggregate, w
 		return playerDamages[i].Damage > playerDamages[j].Damage
 	})
 
+	roundEvents := cloneRoundEvents(state.RoundEvents)
+	annotateRoundEventsWithMatchState(roundEvents, len(state.CTMoneyByPlayer), len(state.TMoneyByPlayer))
+
 	state.RoundHistory = append(state.RoundHistory, entities.RoundSummary{
 		RoundNumber:     roundNumber,
 		WinnerTeam:      teamName(winningTeam),
@@ -1536,7 +1616,7 @@ func commitRoundAwards(state *roundState, players map[string]*playerAggregate, w
 		CTMoneyByPlayer: state.CTMoneyByPlayer,
 		TMoneyByPlayer:  state.TMoneyByPlayer,
 		MultiKills:      multiKills,
-		Events:          cloneRoundEvents(state.RoundEvents),
+		Events:          roundEvents,
 	})
 }
 

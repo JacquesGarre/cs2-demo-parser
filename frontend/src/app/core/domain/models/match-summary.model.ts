@@ -86,6 +86,7 @@ export interface RoundEvent {
   assistantName?: string;
   weapon?: string;
   site?: string;
+  matchState?: string;
   locationLabel?: string;
   x?: number;
   y?: number;
