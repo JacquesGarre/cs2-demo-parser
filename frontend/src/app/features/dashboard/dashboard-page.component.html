@@ -231,8 +231,16 @@
             <strong>{{ player.adr.toFixed(1) }}</strong>
           </article>
           <article class="drawer-stat-card">
+            <p>KPR</p>
+            <strong>{{ player.killsPerRound.toFixed(2) }}</strong>
+          </article>
+          <article class="drawer-stat-card">
             <p>HS%</p>
             <strong>{{ player.hsPercentage.toFixed(1) }}%</strong>
+          </article>
+          <article class="drawer-stat-card">
+            <p>MVP</p>
+            <strong>{{ player.bestRoundPlayerCount }}</strong>
           </article>
           <article class="drawer-stat-card">
             <p>2Ks</p>
@@ -278,9 +286,12 @@
                 <strong>Round {{ standout.roundNumber }}</strong>
                 <span>{{ standout.title }}</span>
               </div>
-              <p class="standout-round-side" [class.standout-round-side--ct]="standout.side === 'CT'" [class.standout-round-side--t]="standout.side === 'T'">
-                {{ standout.side }} side
-              </p>
+              <div class="standout-round-badges">
+                <p class="standout-round-side" [class.standout-round-side--ct]="standout.side === 'CT'" [class.standout-round-side--t]="standout.side === 'T'">
+                  {{ standout.side }} side
+                </p>
+                <p class="standout-round-mvp" *ngIf="standout.mvpLabel">{{ standout.mvpLabel }}</p>
+              </div>
               <ul>
                 <li *ngFor="let detail of standout.details">{{ detail }}</li>
               </ul>

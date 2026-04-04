@@ -42,6 +42,7 @@ type StandoutRound = {
   side: 'CT' | 'T';
   title: string;
   details: string[];
+  mvpLabel?: string;
   score: number;
 };
 
@@ -542,6 +543,7 @@ export class DashboardPageComponent implements OnInit, AfterViewInit, OnDestroy 
         side: player.team === this.teamASideForRound(round.roundNumber) ? 'CT' : 'T',
         title,
         details: uniqueDetails,
+        mvpLabel: roundMvp ? (roundMvp.reason === 'Round MVP' ? 'Round MVP' : `MVP • ${roundMvp.reason}`) : undefined,
         score,
       });
     }
