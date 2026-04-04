@@ -67,7 +67,7 @@
       </div>
 
       <div class="timeline">
-        <section class="timeline-row" [class.halftime-row]="round.roundNumber === halftimeRound" *ngFor="let round of roundTimeline">
+        <section class="timeline-row" [class.halftime-row]="round.roundNumber === halftimeRound" *ngFor="let round of roundTimeline; trackBy: trackByRoundNumber">
           <article
             class="round-node"
             [class.left]="round.winnerSide === 'left'"
@@ -151,6 +151,57 @@
                 </div>
               </section>
             </div>
+
+            <details
+              class="round-events"
+              *ngIf="round.events.length > 0"
+              [class.round-events--left]="round.winnerSide === 'left'"
+              [class.round-events--right]="round.winnerSide === 'right'"
+              [open]="isRoundEventExpanded(round.roundNumber)"
+              (toggle)="setRoundEventExpanded(round.roundNumber, $any($event.target).open)">
+              <summary>
+                <span class="round-events-summary-label">
+                  <span class="round-events-chevron" aria-hidden="true">▾</span>
+                  <span>{{ isRoundEventExpanded(round.roundNumber) ? 'Hide round details' : 'Open round details' }}</span>
+                </span>
+              </summary>
+
+              <div class="round-events-panel">
+                <div class="round-events-panel-inner">
+                  <div class="round-events-toolbar">
+                    <div class="round-events-filters" aria-label="Round event filters">
+                      <button type="button" class="round-events-filter" [class.active]="roundEventFilter(round.roundNumber) === 'all'" (click)="$event.stopPropagation(); setRoundEventFilter(round.roundNumber, 'all')">All</button>
+                      <button type="button" class="round-events-filter" [class.active]="roundEventFilter(round.roundNumber) === 'kill'" (click)="$event.stopPropagation(); setRoundEventFilter(round.roundNumber, 'kill')">Kills</button>
+                      <button type="button" class="round-events-filter" [class.active]="roundEventFilter(round.roundNumber) === 'utility'" (click)="$event.stopPropagation(); setRoundEventFilter(round.roundNumber, 'utility')">Util</button>
+                      <button type="button" class="round-events-filter" [class.active]="roundEventFilter(round.roundNumber) === 'bomb'" (click)="$event.stopPropagation(); setRoundEventFilter(round.roundNumber, 'bomb')">Bomb</button>
+                    </div>
+                  </div>
+
+                  <ol class="round-events-list" *ngIf="filteredRoundEvents(round).length > 0; else noFilteredRoundEvents">
+                    <li class="round-event" *ngFor="let event of filteredRoundEvents(round); trackBy: trackByRoundEvent" [class.round-event--kill]="event.eventType === 'kill'" [class.round-event--utility]="event.eventType === 'utility'" [class.round-event--bomb]="event.eventType === 'bomb' || event.eventType === 'plant' || event.eventType === 'defuse'" [class.round-event--mvp]="event.eventType === 'mvp'" [class.round-event--team-a]="isRoundEventForTeamA(round, event)" [class.round-event--team-b]="isRoundEventForTeamB(round, event)">
+                      <span class="round-event-time">{{ event.timeLabel || '1:55' }}</span>
+                      <div class="round-event-body">
+                        <p>{{ event.description }}</p>
+                        <div class="round-event-tags">
+                          <span>{{ event.eventType | titlecase }}</span>
+                          <span *ngIf="event.site">Site {{ event.site }}</span>
+                          <span *ngIf="event.isEntry">Entry</span>
+                          <span *ngIf="event.isTrade">Trade</span>
+                          <span *ngIf="event.isHeadshot">HS</span>
+                          <span *ngIf="event.isWallbang">Wallbang</span>
+                          <span *ngIf="event.throughSmoke">Through smoke</span>
+                        </div>
+                      </div>
+                    </li>
+                  </ol>
+
+                  <ng-template #noFilteredRoundEvents>
+                    <p class="round-events-empty">No events for this filter in this round.</p>
+                  </ng-template>
+                </div>
+              </div>
+            </details>
+
             <footer class="round-winner">
               {{ round.winner === 'TEAM A' ? summaryData.teamAName + ' won' : round.winner === 'TEAM B' ? summaryData.teamBName + ' won' : 'Winner unknown' }}
             </footer>

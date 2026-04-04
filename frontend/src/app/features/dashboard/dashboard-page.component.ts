@@ -6,7 +6,7 @@ import { Chart, registerables } from 'chart.js';
 import { GetJobStatusUseCase } from '../../core/application/use-cases/get-job-status.use-case';
 import { GetMatchSummaryUseCase } from '../../core/application/use-cases/get-match-summary.use-case';
 import { AnalysisJob } from '../../core/domain/models/analysis-job.model';
-import { HeatPoint, MatchSummary, PlayerSummary, RoundPerformance, RoundPlayerMoney } from '../../core/domain/models/match-summary.model';
+import { HeatPoint, MatchSummary, PlayerSummary, RoundEvent, RoundPerformance, RoundPlayerMoney } from '../../core/domain/models/match-summary.model';
 import { RadarMinimapComponent } from './components/radar-minimap/radar-minimap.component';
 
 type PlayerStatColumn = {
@@ -30,12 +30,15 @@ type TimelineRound = {
   teamBMoneyDetails: RoundPlayerMoney[];
   teamAMultiKills: RoundPerformance[];
   teamBMultiKills: RoundPerformance[];
+  events: RoundEvent[];
 };
 
 type PlayerDamageRound = {
   roundNumber: number;
   damage: number;
 };
+
+type RoundEventFilter = 'all' | 'kill' | 'utility' | 'bomb';
 
 type StandoutRound = {
   roundNumber: number;
@@ -71,6 +74,8 @@ export class DashboardPageComponent implements OnInit, AfterViewInit, OnDestroy 
   readonly heatmapMode = signal<'kills' | 'deaths'>('kills');
   readonly errorMessage = signal('');
   readonly fakeProgress = signal(0);
+  readonly roundEventFilters = signal<Record<number, RoundEventFilter>>({});
+  readonly roundEventOpenStates = signal<Record<number, boolean>>({});
   private progressInterval?: ReturnType<typeof setInterval>;
   readonly statColumns: PlayerStatColumn[] = [
     { label: 'K/D/A', value: (player) => `${player.kills}/${player.deaths}/${player.assists}` },
@@ -301,8 +306,61 @@ export class DashboardPageComponent implements OnInit, AfterViewInit, OnDestroy 
         teamBMoneyDetails: teamBMoneyByPlayer,
         teamAMultiKills,
         teamBMultiKills,
+        events: round.events ?? [],
       };
     });
+  }
+
+  roundEventFilter(roundNumber: number): RoundEventFilter {
+    return this.roundEventFilters()[roundNumber] ?? 'all';
+  }
+
+  setRoundEventFilter(roundNumber: number, filter: RoundEventFilter): void {
+    this.roundEventFilters.update((current) => ({
+      ...current,
+      [roundNumber]: filter,
+    }));
+  }
+
+  filteredRoundEvents(round: TimelineRound): RoundEvent[] {
+    const filter = this.roundEventFilter(round.roundNumber);
+
+    if (filter === 'all') {
+      return round.events;
+    }
+
+    if (filter === 'bomb') {
+      return round.events.filter((event) => event.eventType === 'bomb' || event.eventType === 'plant' || event.eventType === 'defuse');
+    }
+
+    return round.events.filter((event) => event.eventType === filter);
+  }
+
+  isRoundEventForTeamA(round: TimelineRound, event: RoundEvent): boolean {
+    return event.team === this.teamRoleForRound('TEAM A', round.roundNumber);
+  }
+
+  isRoundEventForTeamB(round: TimelineRound, event: RoundEvent): boolean {
+    return event.team === this.teamRoleForRound('TEAM B', round.roundNumber);
+  }
+
+  isRoundEventExpanded(roundNumber: number): boolean {
+    return this.roundEventOpenStates()[roundNumber] ?? false;
+  }
+
+  setRoundEventExpanded(roundNumber: number, expanded: boolean): void {
+    this.roundEventOpenStates.update((current) => ({
+      ...current,
+      [roundNumber]: expanded,
+    }));
+  }
+
+  trackByRoundNumber(_index: number, round: TimelineRound): number {
+    return round.roundNumber;
+  }
+
+  trackByRoundEvent(_index: number, event: RoundEvent): string {
+    return `${event.tick}-${event.eventType}-${event.description}`;
   }
 
   private resolveAwardTeam(roundNumber: number, awardTeam: string): TimelineWinner {

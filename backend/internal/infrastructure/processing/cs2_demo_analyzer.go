@@ -6,6 +6,7 @@ import (
 	"path/filepath"
 	"sort"
 	"strings"
+	"time"
 
 	"github.com/jcqsg/cs2-demos/backend/internal/domain/entities"
 	"github.com/markus-wa/demoinfocs-golang/v5/pkg/demoinfocs"
@@ -34,14 +35,27 @@ type playerAggregate struct {
 	DeathPoints          []entities.HeatPoint
 }
 
+type recentDeathEvent struct {
+	KillerID   string
+	VictimID   string
+	VictimTeam common.Team
+	Tick       int
+}
+
 type roundState struct {
 	CurrentRound       int
 	ActiveRound        bool
 	RoundCommitted     bool
 	PendingWinner      common.Team
+	PendingEndReason   events.RoundEndReason
+	PendingEndTick     int
+	PendingEndTime     string
+	LiveStartTick      int
 	RoundKills         map[string]int
 	RoundKillDetails   map[string][]entities.RoundKillDetail
 	RoundDamage        map[string]int
+	RoundEvents        []entities.RoundEvent
+	RecentDeaths       []recentDeathEvent
 	CTEconomy          string
 	TEconomy           string
 	CTStartMoney       int
@@ -58,6 +72,9 @@ type roundState struct {
 
 const maxRoundHistoryEntries = 30
 const economyGraceTicks = 64
+const defaultRoundTimeSeconds = 115
+const tradeWindowSeconds = 5
+const roundResultTickOffset = 1000000
 
 func NewCS2DemoAnalyzer() *CS2DemoAnalyzer {
 	return &CS2DemoAnalyzer{}
@@ -109,9 +126,15 @@ func (a *CS2DemoAnalyzer) Analyze(demo entities.Demo) (entities.MatchSummary, er
 		state.ActiveRound = true
 		state.RoundCommitted = false
 		state.PendingWinner = common.TeamUnassigned
+		state.PendingEndReason = events.RoundEndReasonStillInProgress
+		state.PendingEndTick = 0
+		state.PendingEndTime = ""
+		state.LiveStartTick = 0
 		state.RoundKills = map[string]int{}
 		state.RoundKillDetails = map[string][]entities.RoundKillDetail{}
 		state.RoundDamage = map[string]int{}
+		state.RoundEvents = nil
+		state.RecentDeaths = nil
 		state.CTEconomy = "Unknown"
 		state.TEconomy = "Unknown"
 		state.CTStartMoney = 0
@@ -140,6 +163,7 @@ func (a *CS2DemoAnalyzer) Analyze(demo entities.Demo) (entities.MatchSummary, er
 			return
 		}
 
+		state.LiveStartTick = gameState.IngameTick()
 		state.EconomyCaptureTick = gameState.IngameTick() + economyGraceTicks
 	})
 
@@ -156,6 +180,9 @@ func (a *CS2DemoAnalyzer) Analyze(demo entities.Demo) (entities.MatchSummary, er
 
 		if isCompetitiveTeam(e.Winner) {
 			state.PendingWinner = e.Winner
+			state.PendingEndReason = e.Reason
+			state.PendingEndTick = currentIngameTick(parser)
+			state.PendingEndTime = roundTimeLabel(parser, &state)
 		}
 	})
 
@@ -175,7 +202,7 @@ func (a *CS2DemoAnalyzer) Analyze(demo entities.Demo) (entities.MatchSummary, er
 			return
 		}
 
-		if !commitRoundResult(&state, players, winner) {
+		if !commitRoundResult(&state, players, winner, state.PendingEndReason, state.PendingEndTick, state.PendingEndTime) {
 			state.ActiveRound = false
 			state.PendingWinner = common.TeamUnassigned
 			return
@@ -209,6 +236,29 @@ func (a *CS2DemoAnalyzer) Analyze(demo entities.Demo) (entities.MatchSummary, er
 		}
 
 		state.RoundDamage[agg.ID] += e.HealthDamageTaken
+
+		if isNoteworthyDamage(e) {
+			state.RoundEvents = append(state.RoundEvents, newRoundEvent(
+				currentIngameTick(parser),
+				roundTimeLabel(parser, &state),
+				"damage",
+				teamName(e.Attacker.Team),
+				safePlayerName(e.Attacker),
+				safePlayerName(e.Player),
+				"",
+				hurtWeaponLabel(e),
+				"",
+				float64(e.Player.Position().X),
+				float64(e.Player.Position().Y),
+				float64(e.Player.Position().Z),
+				false,
+				false,
+				e.HitGroup == events.HitGroupHead,
+				false,
+				false,
+				buildDamageEventDescription(e),
+			))
+		}
 	})
 
 	parser.RegisterEventHandler(func(e events.Kill) {
@@ -220,6 +270,7 @@ func (a *CS2DemoAnalyzer) Analyze(demo entities.Demo) (entities.MatchSummary, er
 			return
 		}
 
+		eventTick := currentIngameTick(parser)
 		victimAgg := upsertPlayer(players, e.Victim)
 		killerName := "World"
 		killerSide := "Unknown"
@@ -244,6 +295,26 @@ func (a *CS2DemoAnalyzer) Analyze(demo entities.Demo) (entities.MatchSummary, er
 		))
 
 		if e.Killer == nil {
+			state.RoundEvents = append(state.RoundEvents, newRoundEvent(
+				eventTick,
+				roundTimeLabel(parser, &state),
+				"kill",
+				"Unknown",
+				"World",
+				safePlayerName(e.Victim),
+				"",
+				killWeaponLabel(e),
+				"",
+				float64(e.Victim.Position().X),
+				float64(e.Victim.Position().Y),
+				float64(e.Victim.Position().Z),
+				false,
+				false,
+				false,
+				false,
+				false,
+				fmt.Sprintf("%s died to world damage", safePlayerName(e.Victim)),
+			))
 			return
 		}
 		if e.Killer.SteamID64 == e.Victim.SteamID64 {
@@ -278,10 +349,43 @@ func (a *CS2DemoAnalyzer) Analyze(demo entities.Demo) (entities.MatchSummary, er
 			killerAgg.HeadshotKills++
 		}
 
+		assistantName := ""
 		if e.Assister != nil && !e.AssistedFlash && isCompetitiveTeam(e.Assister.Team) && e.Assister.SteamID64 != e.Killer.SteamID64 && e.Assister.SteamID64 != e.Victim.SteamID64 && e.Assister.Team == e.Killer.Team {
 			assisterAgg := upsertPlayer(players, e.Assister)
 			assisterAgg.Assists++
+			assistantName = safePlayerName(e.Assister)
+		} else if e.Assister != nil && e.Assister.SteamID64 != e.Killer.SteamID64 && e.Assister.SteamID64 != e.Victim.SteamID64 {
+			assistantName = safePlayerName(e.Assister)
 		}
+
+		isEntry := !state.OpeningTaken[state.CurrentRound]
+		isTrade := isTradeKill(state.RecentDeaths, eventTick, int(parser.TickRate()), e.Killer, e.Victim)
+		state.RoundEvents = append(state.RoundEvents, newRoundEvent(
+			eventTick,
+			roundTimeLabel(parser, &state),
+			"kill",
+			teamName(e.Killer.Team),
+			safePlayerName(e.Killer),
+			safePlayerName(e.Victim),
+			assistantName,
+			killWeaponLabel(e),
+			"",
+			float64(e.Victim.Position().X),
+			float64(e.Victim.Position().Y),
+			float64(e.Victim.Position().Z),
+			isEntry,
+			isTrade,
+			e.IsHeadshot,
+			e.IsWallBang(),
+			e.ThroughSmoke,
+			buildKillEventDescription(e, isEntry, isTrade, assistantName),
+		))
+		state.RecentDeaths = appendPrunedRecentDeaths(state.RecentDeaths, recentDeathEvent{
+			KillerID: playerID(e.Killer),
+			VictimID: playerID(e.Victim),
+			VictimTeam: e.Victim.Team,
+			Tick: eventTick,
+		}, eventTick, int(parser.TickRate()))
 
 		if !state.OpeningTaken[state.CurrentRound] {
 			killerAgg.OpeningDuels++
@@ -309,6 +413,323 @@ func (a *CS2DemoAnalyzer) Analyze(demo entities.Demo) (entities.MatchSummary, er
 			Reason:     mvpReasonLabel(e.Reason),
 		}
 		applyRoundMVPStats(lastRound, lastRound.MVP)
+		lastRound.Events = append(lastRound.Events, newRoundEvent(
+			currentIngameTick(parser),
+			roundTimeLabel(parser, &state),
+			"mvp",
+			aggregate.Team,
+			aggregate.PlayerName,
+			"",
+			"",
+			"",
+			"",
+			0,
+			0,
+			0,
+			false,
+			false,
+			false,
+			false,
+			false,
+			fmt.Sprintf("Round MVP awarded to %s (%s)", aggregate.PlayerName, mvpReasonLabel(e.Reason)),
+		))
+		sortRoundEventsInPlace(lastRound.Events)
+	})
+
+	parser.RegisterEventHandler(func(e events.BombPlantBegin) {
+		if !state.ActiveRound {
+			return
+		}
+		state.RoundEvents = append(state.RoundEvents, newRoundEvent(
+			currentIngameTick(parser),
+			roundTimeLabel(parser, &state),
+			"plant",
+			teamName(playerTeam(e.Player)),
+			safePlayerName(e.Player),
+			"",
+			"",
+			"C4",
+			bombSiteLabel(e.Site),
+			0,
+			0,
+			0,
+			false,
+			false,
+			false,
+			false,
+			false,
+			buildBombEventDescription("starting plant", e.Player, e.Site),
+		))
+	})
+
+	parser.RegisterEventHandler(func(e events.BombPlanted) {
+		if !state.ActiveRound {
+			return
+		}
+		state.RoundEvents = append(state.RoundEvents, newRoundEvent(
+			currentIngameTick(parser),
+			roundTimeLabel(parser, &state),
+			"plant",
+			teamName(playerTeam(e.Player)),
+			safePlayerName(e.Player),
+			"",
+			"",
+			"C4",
+			bombSiteLabel(e.Site),
+			0,
+			0,
+			0,
+			false,
+			false,
+			false,
+			false,
+			false,
+			buildBombEventDescription("planted the bomb", e.Player, e.Site),
+		))
+	})
+
+	parser.RegisterEventHandler(func(e events.BombDefuseStart) {
+		if !state.ActiveRound {
+			return
+		}
+		kitLabel := ""
+		if e.HasKit {
+			kitLabel = " with a kit"
+		}
+		state.RoundEvents = append(state.RoundEvents, newRoundEvent(
+			currentIngameTick(parser),
+			roundTimeLabel(parser, &state),
+			"defuse",
+			teamName(playerTeam(e.Player)),
+			safePlayerName(e.Player),
+			"",
+			"",
+			"Defuse kit",
+			"",
+			0,
+			0,
+			0,
+			false,
+			false,
+			false,
+			false,
+			false,
+			fmt.Sprintf("%s started defusing%s", safePlayerName(e.Player), kitLabel),
+		))
+	})
+
+	parser.RegisterEventHandler(func(e events.BombDefused) {
+		if !state.ActiveRound {
+			return
+		}
+		state.RoundEvents = append(state.RoundEvents, newRoundEvent(
+			currentIngameTick(parser),
+			roundTimeLabel(parser, &state),
+			"defuse",
+			teamName(playerTeam(e.Player)),
+			safePlayerName(e.Player),
+			"",
+			"",
+			"C4",
+			bombSiteLabel(e.Site),
+			0,
+			0,
+			0,
+			false,
+			false,
+			false,
+			false,
+			false,
+			buildBombEventDescription("defused the bomb", e.Player, e.Site),
+		))
+	})
+
+	parser.RegisterEventHandler(func(e events.BombExplode) {
+		if !state.ActiveRound {
+			return
+		}
+		state.RoundEvents = append(state.RoundEvents, newRoundEvent(
+			currentIngameTick(parser),
+			roundTimeLabel(parser, &state),
+			"bomb",
+			teamName(playerTeam(e.Player)),
+			safePlayerName(e.Player),
+			"",
+			"",
+			"C4",
+			bombSiteLabel(e.Site),
+			0,
+			0,
+			0,
+			false,
+			false,
+			false,
+			false,
+			false,
+			buildBombEventDescription("detonated the bomb", e.Player, e.Site),
+		))
+	})
+
+	parser.RegisterEventHandler(func(e events.BombDropped) {
+		if !state.ActiveRound {
+			return
+		}
+		state.RoundEvents = append(state.RoundEvents, newRoundEvent(
+			currentIngameTick(parser),
+			roundTimeLabel(parser, &state),
+			"bomb",
+			teamName(playerTeam(e.Player)),
+			safePlayerName(e.Player),
+			"",
+			"",
+			"C4",
+			"",
+			0,
+			0,
+			0,
+			false,
+			false,
+			false,
+			false,
+			false,
+			fmt.Sprintf("%s dropped the bomb", safePlayerName(e.Player)),
+		))
+	})
+
+	parser.RegisterEventHandler(func(e events.BombPickup) {
+		if !state.ActiveRound {
+			return
+		}
+		state.RoundEvents = append(state.RoundEvents, newRoundEvent(
+			currentIngameTick(parser),
+			roundTimeLabel(parser, &state),
+			"bomb",
+			teamName(playerTeam(e.Player)),
+			safePlayerName(e.Player),
+			"",
+			"",
+			"C4",
+			"",
+			0,
+			0,
+			0,
+			false,
+			false,
+			false,
+			false,
+			false,
+			fmt.Sprintf("%s picked up the bomb", safePlayerName(e.Player)),
+		))
+	})
+
+	parser.RegisterEventHandler(func(e events.PlayerFlashed) {
+		if !state.ActiveRound || e.Player == nil || e.Attacker == nil {
+			return
+		}
+		if e.Attacker.SteamID64 == e.Player.SteamID64 || !areOpposingTeams(e.Attacker.Team, e.Player.Team) {
+			return
+		}
+		if e.FlashDuration() < 1500*time.Millisecond {
+			return
+		}
+		state.RoundEvents = append(state.RoundEvents, newRoundEvent(
+			currentIngameTick(parser),
+			roundTimeLabel(parser, &state),
+			"utility",
+			teamName(e.Attacker.Team),
+			safePlayerName(e.Attacker),
+			safePlayerName(e.Player),
+			"",
+			"Flashbang",
+			"",
+			0,
+			0,
+			0,
+			false,
+			false,
+			false,
+			false,
+			false,
+			fmt.Sprintf("%s flashed %s for %.1fs", safePlayerName(e.Attacker), safePlayerName(e.Player), e.FlashDuration().Seconds()),
+		))
+	})
+
+	parser.RegisterEventHandler(func(e events.SmokeStart) {
+		if !state.ActiveRound {
+			return
+		}
+		state.RoundEvents = append(state.RoundEvents, newRoundEvent(
+			currentIngameTick(parser),
+			roundTimeLabel(parser, &state),
+			"utility",
+			teamName(playerTeam(e.Thrower)),
+			safePlayerName(e.Thrower),
+			"",
+			"",
+			grenadeTypeLabel(e.GrenadeType, "Smoke"),
+			"",
+			float64(e.Position.X),
+			float64(e.Position.Y),
+			float64(e.Position.Z),
+			false,
+			false,
+			false,
+			false,
+			false,
+			buildGrenadeEventDescription("bloomed", e.Thrower, grenadeTypeLabel(e.GrenadeType, "Smoke")),
+		))
+	})
+
+	parser.RegisterEventHandler(func(e events.HeExplode) {
+		if !state.ActiveRound {
+			return
+		}
+		state.RoundEvents = append(state.RoundEvents, newRoundEvent(
+			currentIngameTick(parser),
+			roundTimeLabel(parser, &state),
+			"utility",
+			teamName(playerTeam(e.Thrower)),
+			safePlayerName(e.Thrower),
+			"",
+			"",
+			grenadeTypeLabel(e.GrenadeType, "HE Grenade"),
+			"",
+			float64(e.Position.X),
+			float64(e.Position.Y),
+			float64(e.Position.Z),
+			false,
+			false,
+			false,
+			false,
+			false,
+			buildGrenadeEventDescription("exploded", e.Thrower, grenadeTypeLabel(e.GrenadeType, "HE Grenade")),
+		))
+	})
+
+	parser.RegisterEventHandler(func(e events.FlashExplode) {
+		if !state.ActiveRound {
+			return
+		}
+		state.RoundEvents = append(state.RoundEvents, newRoundEvent(
+			currentIngameTick(parser),
+			roundTimeLabel(parser, &state),
+			"utility",
+			teamName(playerTeam(e.Thrower)),
+			safePlayerName(e.Thrower),
+			"",
+			"",
+			grenadeTypeLabel(e.GrenadeType, "Flashbang"),
+			"",
+			float64(e.Position.X),
+			float64(e.Position.Y),
+			float64(e.Position.Z),
+			false,
+			false,
+			false,
+			false,
+			false,
+			buildGrenadeEventDescription("popped", e.Thrower, grenadeTypeLabel(e.GrenadeType, "Flashbang")),
+		))
 	})
 
 	if err := parser.ParseToEnd(); err != nil {
@@ -316,7 +737,7 @@ func (a *CS2DemoAnalyzer) Analyze(demo entities.Demo) (entities.MatchSummary, er
 	}
 
 	if state.ActiveRound && !state.RoundCommitted && isCompetitiveTeam(state.PendingWinner) {
-		if commitRoundResult(&state, players, state.PendingWinner) {
+		if commitRoundResult(&state, players, state.PendingWinner, state.PendingEndReason, state.PendingEndTick, state.PendingEndTime) {
 			state.RoundCommitted = true
 		}
 		state.ActiveRound = false
@@ -602,6 +1023,9 @@ func upsertPlayer(items map[string]*playerAggregate, player *common.Player) *pla
 }
 
 func playerID(player *common.Player) string {
+	if player == nil {
+		return "unknown"
+	}
 	if player.SteamID64 != 0 {
 		return fmt.Sprintf("%d", player.SteamID64)
 	}
@@ -609,6 +1033,9 @@ func playerID(player *common.Player) string {
 }
 
 func safePlayerName(player *common.Player) string {
+	if player == nil {
+		return "Unknown player"
+	}
 	if player.Name != "" {
 		return player.Name
 	}
@@ -701,6 +1128,302 @@ func sortHeatPoints(points []entities.HeatPoint) {
 		}
 		return points[i].RoundNumber < points[j].RoundNumber
 	})
+}
+
+func cloneRoundEvents(events []entities.RoundEvent) []entities.RoundEvent {
+	cloned := make([]entities.RoundEvent, len(events))
+	copy(cloned, events)
+	sortRoundEventsInPlace(cloned)
+	return cloned
+}
+
+func sortRoundEventsInPlace(events []entities.RoundEvent) {
+	sort.SliceStable(events, func(i, j int) bool {
+		return events[i].Tick < events[j].Tick
+	})
+}
+
+func currentIngameTick(parser demoinfocs.Parser) int {
+	gameState := parser.GameState()
+	if gameState == nil {
+		return 0
+	}
+	return gameState.IngameTick()
+}
+
+func roundTimeLabel(parser demoinfocs.Parser, state *roundState) string {
+	return formatRoundClock(state.LiveStartTick, currentIngameTick(parser), parser.TickRate())
+}
+
+func formatRoundClock(liveStartTick int, eventTick int, tickRate float64) string {
+	if tickRate <= 0 {
+		tickRate = 64
+	}
+	if eventTick <= 0 {
+		return formatClockSeconds(defaultRoundTimeSeconds)
+	}
+	if liveStartTick <= 0 {
+		return formatClockSeconds(defaultRoundTimeSeconds)
+	}
+
+	elapsedTicks := eventTick - liveStartTick
+	if elapsedTicks < 0 {
+		elapsedTicks = 0
+	}
+
+	remaining := defaultRoundTimeSeconds - int(float64(elapsedTicks)/tickRate)
+	if remaining < 0 {
+		remaining = 0
+	}
+	return formatClockSeconds(remaining)
+}
+
+func formatClockSeconds(seconds int) string {
+	if seconds < 0 {
+		seconds = 0
+	}
+	return fmt.Sprintf("%d:%02d", seconds/60, seconds%60)
+}
+
+func playerTeam(player *common.Player) common.Team {
+	if player == nil {
+		return common.TeamUnassigned
+	}
+	return player.Team
+}
+
+func hurtWeaponLabel(e events.PlayerHurt) string {
+	if e.Weapon != nil {
+		if name := strings.TrimSpace(e.Weapon.String()); name != "" && name != "Unknown" {
+			return name
+		}
+	}
+	if name := strings.TrimSpace(e.WeaponString); name != "" {
+		return name
+	}
+	return "Unknown weapon"
+}
+
+func bombSiteLabel(site events.Bombsite) string {
+	switch site {
+	case events.BombsiteA:
+		return "A"
+	case events.BombsiteB:
+		return "B"
+	default:
+		return ""
+	}
+}
+
+func grenadeTypeLabel(grenadeType common.EquipmentType, fallback string) string {
+	name := strings.TrimSpace(grenadeType.String())
+	if name == "" || name == "EqUnknown" || name == "Unknown" {
+		return fallback
+	}
+	return name
+}
+
+func buildBombEventDescription(action string, player *common.Player, site events.Bombsite) string {
+	siteLabel := bombSiteLabel(site)
+	if siteLabel != "" {
+		return fmt.Sprintf("%s %s on %s", safePlayerName(player), action, siteLabel)
+	}
+	return fmt.Sprintf("%s %s", safePlayerName(player), action)
+}
+
+func buildGrenadeEventDescription(action string, thrower *common.Player, grenade string) string {
+	if thrower == nil {
+		return action
+	}
+	if grenade == "" {
+		return fmt.Sprintf("%s %s", safePlayerName(thrower), action)
+	}
+	return fmt.Sprintf("%s threw a %s that %s", safePlayerName(thrower), grenade, action)
+}
+
+func roundEndReasonLabel(reason events.RoundEndReason, winner common.Team) string {
+	switch reason {
+	case events.RoundEndReasonTargetBombed:
+		return "bomb exploded"
+	case events.RoundEndReasonBombDefused:
+		return "bomb defused"
+	case events.RoundEndReasonTargetSaved:
+		return "time expired"
+	case events.RoundEndReasonCTWin, events.RoundEndReasonTerroristsWin:
+		return "no enemies remaining"
+	case events.RoundEndReasonTerroristsSurrender, events.RoundEndReasonCTSurrender:
+		return "opponents surrendered"
+	case events.RoundEndReasonDraw:
+		return "round ended in a draw"
+	case events.RoundEndReasonHostagesRescued:
+		return "hostages rescued"
+	case events.RoundEndReasonHostagesNotRescued:
+		return "hostages not rescued"
+	case events.RoundEndReasonTerroristsPlanted:
+		return "bomb planted"
+	default:
+		if isCompetitiveTeam(winner) {
+			return "won the round"
+		}
+		return "round ended"
+	}
+}
+
+func buildRoundEndDescription(winner common.Team, reason events.RoundEndReason) string {
+	winnerLabel := teamName(winner)
+	reasonLabel := roundEndReasonLabel(reason, winner)
+	if reasonLabel == "won the round" || reasonLabel == "round ended" {
+		return fmt.Sprintf("%s won the round", winnerLabel)
+	}
+	return fmt.Sprintf("%s won the round (%s)", winnerLabel, reasonLabel)
+}
+
+func isNoteworthyDamage(e events.PlayerHurt) bool {
+	if e.HealthDamageTaken >= 40 {
+		return true
+	}
+	if e.Health <= 25 {
+		return true
+	}
+	return e.HitGroup == events.HitGroupHead
+}
+
+func buildDamageEventDescription(e events.PlayerHurt) string {
+	text := fmt.Sprintf("%s hit %s for %d damage with %s", safePlayerName(e.Attacker), safePlayerName(e.Player), e.HealthDamageTaken, hurtWeaponLabel(e))
+	if e.HitGroup == events.HitGroupHead {
+		text += " (headshot)"
+	}
+	return text
+}
+
+func buildKillEventDescription(e events.Kill, isEntry bool, isTrade bool, assistantName string) string {
+	action := "eliminated"
+	switch {
+	case isEntry:
+		action = "entry fragged"
+	case isTrade:
+		action = "traded"
+	}
+
+	text := fmt.Sprintf("%s %s %s with %s", safePlayerName(e.Killer), action, safePlayerName(e.Victim), killWeaponLabel(e))
+	extra := make([]string, 0, 5)
+	if e.IsHeadshot {
+		extra = append(extra, "headshot")
+	}
+	if e.IsWallBang() {
+		extra = append(extra, "wallbang")
+	}
+	if e.ThroughSmoke {
+		extra = append(extra, "through smoke")
+	}
+	if e.NoScope {
+		extra = append(extra, "noscope")
+	}
+	if e.AssistedFlash && assistantName != "" {
+		extra = append(extra, fmt.Sprintf("flash assist: %s", assistantName))
+	} else if assistantName != "" {
+		extra = append(extra, fmt.Sprintf("assist: %s", assistantName))
+	}
+	if len(extra) > 0 {
+		text += fmt.Sprintf(" (%s)", strings.Join(extra, ", "))
+	}
+	return text
+}
+
+func newRoundEvent(tick int, timeLabel string, eventType string, team string, actorName string, targetName string, assistantName string, weapon string, site string, x float64, y float64, z float64, isEntry bool, isTrade bool, isHeadshot bool, isWallbang bool, throughSmoke bool, description string) entities.RoundEvent {
+	return entities.RoundEvent{
+		Tick:          tick,
+		TimeLabel:     timeLabel,
+		EventType:     eventType,
+		Description:   description,
+		Team:          team,
+		ActorName:     actorName,
+		TargetName:    targetName,
+		AssistantName: assistantName,
+		Weapon:        weapon,
+		Site:          site,
+		X:             x,
+		Y:             y,
+		Z:             z,
+		IsEntry:       isEntry,
+		IsTrade:       isTrade,
+		IsHeadshot:    isHeadshot,
+		IsWallbang:    isWallbang,
+		ThroughSmoke:  throughSmoke,
+	}
+}
+
+func appendRoundEndEvent(state *roundState, winner common.Team, reason events.RoundEndReason, tick int, timeLabel string) {
+	if state == nil || !isCompetitiveTeam(winner) {
+		return
+	}
+
+	if timeLabel == "" {
+		timeLabel = formatClockSeconds(0)
+	}
+
+	maxTick := tick
+	for _, event := range state.RoundEvents {
+		if event.Tick > maxTick {
+			maxTick = event.Tick
+		}
+	}
+
+	state.RoundEvents = append(state.RoundEvents, newRoundEvent(
+		maxTick+roundResultTickOffset,
+		timeLabel,
+		"result",
+		teamName(winner),
+		"",
+		"",
+		"",
+		"",
+		"",
+		0,
+		0,
+		0,
+		false,
+		false,
+		false,
+		false,
+		false,
+		buildRoundEndDescription(winner, reason),
+	))
+}
+
+func appendPrunedRecentDeaths(existing []recentDeathEvent, latest recentDeathEvent, currentTick int, tickRate int) []recentDeathEvent {
+	if tickRate <= 0 {
+		tickRate = 64
+	}
+	window := tickRate * tradeWindowSeconds
+	kept := make([]recentDeathEvent, 0, len(existing)+1)
+	for _, item := range existing {
+		if currentTick-item.Tick <= window {
+			kept = append(kept, item)
+		}
+	}
+	return append(kept, latest)
+}
+
+func isTradeKill(existing []recentDeathEvent, currentTick int, tickRate int, killer *common.Player, victim *common.Player) bool {
+	if killer == nil || victim == nil {
+		return false
+	}
+	if tickRate <= 0 {
+		tickRate = 64
+	}
+	window := tickRate * tradeWindowSeconds
+	killerID := playerID(killer)
+	victimID := playerID(victim)
+	for _, item := range existing {
+		if currentTick-item.Tick > window {
+			continue
+		}
+		if item.KillerID == victimID && item.VictimTeam == killer.Team && item.VictimID != killerID {
+			return true
+		}
+	}
+	return false
 }
 
 func maxRound(a int, b int) int {
@@ -813,6 +1536,7 @@ func commitRoundAwards(state *roundState, players map[string]*playerAggregate, w
 		CTMoneyByPlayer: state.CTMoneyByPlayer,
 		TMoneyByPlayer:  state.TMoneyByPlayer,
 		MultiKills:      multiKills,
+		Events:          cloneRoundEvents(state.RoundEvents),
 	})
 }
 
@@ -1131,7 +1855,7 @@ func inferWinnerFromScoreAtOfficial(parser demoinfocs.Parser, state *roundState)
 	return common.TeamUnassigned
 }
 
-func commitRoundResult(state *roundState, players map[string]*playerAggregate, winner common.Team) bool {
+func commitRoundResult(state *roundState, players map[string]*playerAggregate, winner common.Team, reason events.RoundEndReason, tick int, timeLabel string) bool {
 	if !isCompetitiveTeam(winner) {
 		return false
 	}
@@ -1140,6 +1864,8 @@ func commitRoundResult(state *roundState, players map[string]*playerAggregate, w
 	if nextRoundNumber > maxRoundHistoryEntries {
 		return false
 	}
+
+	appendRoundEndEvent(state, winner, reason, tick, timeLabel)
 
 	switch winner {
 	case common.TeamCounterTerrorists:
@@ -1193,14 +1919,7 @@ func reconcileMissingFinalRound(parser demoinfocs.Parser, state *roundState, pla
 		return
 	}
 
-	switch winner {
-	case common.TeamCounterTerrorists:
-		state.CTWins++
-		commitRoundAwards(state, players, common.TeamCounterTerrorists, nextRoundNumber)
-	case common.TeamTerrorists:
-		state.TWins++
-		commitRoundAwards(state, players, common.TeamTerrorists, nextRoundNumber)
-	}
+	_ = commitRoundResult(state, players, winner, state.PendingEndReason, state.PendingEndTick, state.PendingEndTime)
 
 	state.ActiveRound = false
 	state.PendingWinner = common.TeamUnassigned

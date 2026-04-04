@@ -77,6 +77,28 @@ type RoundPlayerMoney struct {
 	Armor      string `json:"armor,omitempty"`
 }
 
+type RoundEvent struct {
+	Tick          int     `json:"tick"`
+	TimeLabel     string  `json:"timeLabel,omitempty"`
+	EventType     string  `json:"eventType"`
+	Description   string  `json:"description"`
+	Team          string  `json:"team,omitempty"`
+	ActorName     string  `json:"actorName,omitempty"`
+	TargetName    string  `json:"targetName,omitempty"`
+	AssistantName string  `json:"assistantName,omitempty"`
+	Weapon        string  `json:"weapon,omitempty"`
+	Site          string  `json:"site,omitempty"`
+	LocationLabel string  `json:"locationLabel,omitempty"`
+	X             float64 `json:"x,omitempty"`
+	Y             float64 `json:"y,omitempty"`
+	Z             float64 `json:"z,omitempty"`
+	IsEntry       bool    `json:"isEntry,omitempty"`
+	IsTrade       bool    `json:"isTrade,omitempty"`
+	IsHeadshot    bool    `json:"isHeadshot,omitempty"`
+	IsWallbang    bool    `json:"isWallbang,omitempty"`
+	ThroughSmoke  bool    `json:"throughSmoke,omitempty"`
+}
+
 type RoundSummary struct {
 	RoundNumber     int                `json:"roundNumber"`
 	WinnerTeam      string             `json:"winnerTeam"`
@@ -90,6 +112,7 @@ type RoundSummary struct {
 	CTMoneyByPlayer []RoundPlayerMoney `json:"ctMoneyByPlayer,omitempty"`
 	TMoneyByPlayer  []RoundPlayerMoney `json:"tMoneyByPlayer,omitempty"`
 	MultiKills      []RoundPerformance `json:"multiKills"`
+	Events          []RoundEvent       `json:"events,omitempty"`
 }
 
 type MatchSummary struct {

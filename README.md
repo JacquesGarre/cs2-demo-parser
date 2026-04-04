@@ -62,10 +62,17 @@ make local-clean   # Stop services and remove volumes
 - [ ] Add FIFA-style player cards with ratings / Player classification compared to pros (Zywoo, donk, jame etc... with description of why)
 - [ ] Add highlight video per player
 - [ ] Add highlight video per round
-- [ ] Add round win-odds estimation based on buys
+
 - [ ] Add user accounts, team creation, store demos per team to get an average win %
 - [ ] For teams, name tactics, and see the % of wins over maps and rounds
 - [ ] Wire faceit demos directly
 - [ ] Improve the landing page, count of analysed demos, number of players analysed, number of kills detailed, number of rounds analysed, description of the full app
 - [ ] Round analysis, show a bar like chess.com to know what is the advantage (odds of winning the round) during playing the round
 - [ ] About page with details
+- [ ] What was well done, and areas of improvement for each team (B ct hold, B terro rush etc...)
+- [ ] Same for every player in the player drawer
+
+- [ ] Add match state (5v4, 4v5 etc...)
+- [ ] Add human position for each event
+- [ ] Add round win-odds estimation based on buys and events
+- [ ] Add last event "Team {} won the round because every enemy was killed, because bomb exploded, bomb defused etc..."

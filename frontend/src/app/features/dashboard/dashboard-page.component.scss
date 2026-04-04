@@ -914,7 +914,7 @@
 
 .mvp-player {
   margin: 0 0 0.75rem;
-  color: #35597c;
+  color: #274c71;
   font-size: 0.8rem;
   font-weight: 700;
 }
@@ -1018,6 +1018,206 @@
   font-size: 0.78rem;
   font-weight: 700;
   text-align: center;
+}
+
+.round-events {
+  margin-top: 0.75rem;
+  border-top: 1px solid rgba(180, 199, 220, 0.5);
+  padding-top: 0.55rem;
+}
+
+.round-events summary {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  cursor: pointer;
+  list-style: none;
+  color: #274c71;
+  font-size: 0.76rem;
+  font-weight: 800;
+  padding: 0.45rem 0.55rem;
+  border-radius: 10px;
+  background: rgba(234, 243, 252, 0.72);
+  border: 1px solid rgba(180, 199, 220, 0.5);
+}
+
+.round-events summary::-webkit-details-marker {
+  display: none;
+}
+
+.round-events--left summary {
+  background: rgba(234, 243, 252, 0.72);
+  border-color: rgba(180, 199, 220, 0.5);
+  color: #274c71;
+}
+
+.round-events--right summary {
+  background: rgba(255, 245, 235, 0.82);
+  border-color: rgba(240, 172, 110, 0.5);
+  color: #8c4a17;
+}
+
+.round-events-summary-label {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.45rem;
+}
+
+.round-events-chevron {
+  display: inline-grid;
+  place-items: center;
+  width: 1.2rem;
+  height: 1.2rem;
+  border-radius: 999px;
+  background: rgba(80, 173, 231, 0.14);
+  color: #17639d;
+  transition: transform 180ms ease;
+}
+
+.round-events--right .round-events-chevron {
+  background: rgba(255, 164, 80, 0.16);
+  color: #b45b16;
+}
+
+.round-events[open] .round-events-chevron {
+  transform: rotate(180deg);
+}
+
+.round-events-panel {
+  display: grid;
+  grid-template-rows: 0fr;
+  opacity: 0;
+  transition: grid-template-rows 220ms ease, opacity 180ms ease;
+}
+
+.round-events[open] .round-events-panel {
+  grid-template-rows: 1fr;
+  opacity: 1;
+}
+
+.round-events-panel-inner {
+  overflow: hidden;
+  min-height: 0;
+  padding-top: 0.6rem;
+}
+
+.round-events-toolbar {
+  display: flex;
+}
+
+.round-events-filters {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.35rem;
+}
+
+.round-events-filter {
+  border: 1px solid rgba(160, 188, 214, 0.72);
+  background: rgba(247, 251, 255, 0.95);
+  color: #36597c;
+  border-radius: 999px;
+  padding: 0.24rem 0.6rem;
+  font-size: 0.72rem;
+  font-weight: 800;
+  cursor: pointer;
+}
+
+.round-events-filter.active {
+  border-color: rgba(62, 135, 197, 0.78);
+  background: linear-gradient(135deg, rgba(59, 153, 219, 0.9) 0%, rgba(86, 190, 255, 0.9) 100%);
+  color: #fff;
+}
+
+.round-events-list {
+  margin: 0.6rem 0 0;
+  padding: 0;
+  list-style: none;
+  display: grid;
+  gap: 0.45rem;
+}
+
+.round-events-empty {
+  margin: 0.65rem 0 0;
+  color: #5c7a97;
+  font-size: 0.76rem;
+  font-style: italic;
+}
+
+.round-event {
+  display: grid;
+  grid-template-columns: auto 1fr;
+  gap: 0.6rem;
+  align-items: start;
+  border: 1px solid rgba(177, 197, 220, 0.55);
+  border-radius: 10px;
+  padding: 0.5rem 0.6rem;
+  background: rgba(255, 255, 255, 0.62);
+}
+
+.round-event--team-a {
+  border-color: rgba(106, 180, 235, 0.72);
+  background: linear-gradient(180deg, rgba(242, 249, 255, 0.95) 0%, rgba(231, 244, 255, 0.88) 100%);
+}
+
+.round-event--team-b {
+  border-color: rgba(240, 171, 108, 0.76);
+  background: linear-gradient(180deg, rgba(255, 248, 241, 0.95) 0%, rgba(255, 239, 224, 0.9) 100%);
+}
+
+.round-event-time {
+  min-width: 2.6rem;
+  border-radius: 999px;
+  padding: 0.18rem 0.42rem;
+  background: rgba(28, 88, 139, 0.1);
+  color: #1c5d92;
+  font-size: 0.72rem;
+  font-weight: 800;
+  text-align: center;
+}
+
+.round-event--team-b .round-event-time {
+  background: rgba(202, 104, 26, 0.12);
+  color: #9a4b10;
+}
+
+.round-event-body {
+  display: grid;
+  gap: 0.3rem;
+}
+
+.round-event-body p {
+  margin: 0;
+  color: #24486d;
+  font-size: 0.76rem;
+  line-height: 1.4;
+}
+
+.round-event-tags {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.28rem;
+}
+
+.round-event-tags span {
+  border-radius: 999px;
+  padding: 0.14rem 0.42rem;
+  background: rgba(207, 222, 237, 0.48);
+  color: #4a6b8a;
+  font-size: 0.68rem;
+  font-weight: 700;
+}
+
+.round-event--kill {
+  border-color: rgba(121, 181, 228, 0.65);
+}
+
+.round-event--utility {
+  border-color: rgba(175, 171, 222, 0.6);
+}
+
+.round-event--bomb,
+.round-event--mvp {
+  border-color: rgba(240, 180, 110, 0.66);
 }
 
 .money-chip {

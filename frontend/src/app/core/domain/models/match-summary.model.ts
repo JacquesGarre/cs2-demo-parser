@@ -75,6 +75,28 @@ export interface RoundPlayerMoney {
   armor?: string;
 }
 
+export interface RoundEvent {
+  tick: number;
+  timeLabel?: string;
+  eventType: string;
+  description: string;
+  team?: string;
+  actorName?: string;
+  targetName?: string;
+  assistantName?: string;
+  weapon?: string;
+  site?: string;
+  locationLabel?: string;
+  x?: number;
+  y?: number;
+  z?: number;
+  isEntry?: boolean;
+  isTrade?: boolean;
+  isHeadshot?: boolean;
+  isWallbang?: boolean;
+  throughSmoke?: boolean;
+}
+
 export interface RoundSummary {
   roundNumber: number;
   winnerTeam: string;
@@ -88,6 +110,7 @@ export interface RoundSummary {
   ctMoneyByPlayer?: RoundPlayerMoney[];
   tMoneyByPlayer?: RoundPlayerMoney[];
   multiKills: RoundPerformance[];
+  events?: RoundEvent[];
 }
 
 export interface MatchSummary {
