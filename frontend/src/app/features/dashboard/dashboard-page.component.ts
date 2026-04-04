@@ -344,6 +344,47 @@ export class DashboardPageComponent implements OnInit, AfterViewInit, OnDestroy 
     return event.team === this.teamRoleForRound('TEAM B', round.roundNumber);
   }
 
+  hasRoundEventWinProbability(event: RoundEvent): boolean {
+    if (event.eventType === 'result') {
+      return false;
+    }
+
+    return typeof event.ctWinProbability === 'number' || typeof event.tWinProbability === 'number';
+  }
+
+  roundEventTeamAWinProbability(round: TimelineRound, event: RoundEvent): number {
+    const teamASide = this.teamRoleForRound('TEAM A', round.roundNumber);
+    const ctOdds = typeof event.ctWinProbability === 'number'
+      ? event.ctWinProbability
+      : typeof event.tWinProbability === 'number'
+        ? 100 - event.tWinProbability
+        : 50;
+    const tOdds = typeof event.tWinProbability === 'number'
+      ? event.tWinProbability
+      : typeof event.ctWinProbability === 'number'
+        ? 100 - event.ctWinProbability
+        : 50;
+
+    return teamASide === 'CT' ? ctOdds : tOdds;
+  }
+
+  roundEventTeamBWinProbability(round: TimelineRound, event: RoundEvent): number {
+    return 100 - this.roundEventTeamAWinProbability(round, event);
+  }
+
+  roundEventOddsSummary(round: TimelineRound, event: RoundEvent, teamAName: string, teamBName: string): string {
+    const teamAOdds = this.roundEventTeamAWinProbability(round, event);
+    const teamBOdds = this.roundEventTeamBWinProbability(round, event);
+
+    if (teamAOdds === teamBOdds) {
+      return `At this point, ${teamAName} and ${teamBName} are dead even at ${teamAOdds}%.`;
+    }
+
+    const leaderName = teamAOdds > teamBOdds ? teamAName : teamBName;
+    const leaderOdds = Math.max(teamAOdds, teamBOdds);
+    return `At this point, ${leaderName} has ${leaderOdds}% win odds.`;
+  }
+
   isRoundEventExpanded(roundNumber: number): boolean {
     return this.roundEventOpenStates()[roundNumber] ?? false;
   }

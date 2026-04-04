@@ -77,3 +77,41 @@ func TestAnnotateRoundEventsWithMatchState(t *testing.T) {
 		t.Fatalf("expected trade event state 'T 4v4 CT', got %q", events[3].MatchState)
 	}
 }
+
+func TestAnnotateRoundEventsWithWinProbabilities(t *testing.T) {
+	t.Run("rifle and armor advantage favors T", func(t *testing.T) {
+		events := []entities.RoundEvent{{Tick: 10, TimeLabel: "0:45", EventType: "utility", Team: "T", Description: "default setup"}}
+		ctPlayers := []entities.RoundPlayerMoney{{PlayerName: "ct-one", MainWeapon: "USP-S", Armor: "No armor", Utility: 0}}
+		tPlayers := []entities.RoundPlayerMoney{{PlayerName: "t-one", MainWeapon: "AK-47", Armor: "Armor + Helmet", Utility: 2}}
+
+		annotateRoundEventsWithWinProbabilities(events, ctPlayers, tPlayers)
+
+		if events[0].TWinProbability <= events[0].CTWinProbability {
+			t.Fatalf("expected T odds to be higher with AK + armor advantage, got T=%d CT=%d", events[0].TWinProbability, events[0].CTWinProbability)
+		}
+	})
+
+	t.Run("low time without a plant favors CT", func(t *testing.T) {
+		events := []entities.RoundEvent{{Tick: 20, TimeLabel: "0:08", EventType: "utility", Team: "T", Description: "late execute"}}
+		ctPlayers := []entities.RoundPlayerMoney{{PlayerName: "ct-one", MainWeapon: "M4A1-S", Armor: "Armor + Helmet", Utility: 1}}
+		tPlayers := []entities.RoundPlayerMoney{{PlayerName: "t-one", MainWeapon: "AK-47", Armor: "Armor + Helmet", Utility: 1}}
+
+		annotateRoundEventsWithWinProbabilities(events, ctPlayers, tPlayers)
+
+		if events[0].CTWinProbability <= events[0].TWinProbability {
+			t.Fatalf("expected CT odds to be higher late in the round before the bomb is planted, got T=%d CT=%d", events[0].TWinProbability, events[0].CTWinProbability)
+		}
+	})
+
+	t.Run("planted bomb shifts odds toward T", func(t *testing.T) {
+		events := []entities.RoundEvent{{Tick: 30, TimeLabel: "0:32", EventType: "plant", Team: "T", Description: "bomb planted"}}
+		ctPlayers := []entities.RoundPlayerMoney{{PlayerName: "ct-one", MainWeapon: "M4A1-S", Armor: "Armor + Helmet", Utility: 1}}
+		tPlayers := []entities.RoundPlayerMoney{{PlayerName: "t-one", MainWeapon: "AK-47", Armor: "Armor + Helmet", Utility: 1}}
+
+		annotateRoundEventsWithWinProbabilities(events, ctPlayers, tPlayers)
+
+		if events[0].TWinProbability <= events[0].CTWinProbability {
+			t.Fatalf("expected T odds to be higher after the plant, got T=%d CT=%d", events[0].TWinProbability, events[0].CTWinProbability)
+		}
+	})
+}

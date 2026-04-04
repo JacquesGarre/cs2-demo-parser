@@ -1192,6 +1192,47 @@
   line-height: 1.4;
 }
 
+.round-event-odds {
+  display: grid;
+  gap: 0.28rem;
+}
+
+.round-event-odds-head {
+  display: flex;
+  justify-content: space-between;
+  gap: 0.5rem;
+  color: #406284;
+  font-size: 0.67rem;
+  font-weight: 800;
+}
+
+.round-event-odds-bar {
+  display: flex;
+  overflow: hidden;
+  height: 0.45rem;
+  border-radius: 999px;
+  background: rgba(207, 222, 237, 0.5);
+  border: 1px solid rgba(170, 193, 217, 0.52);
+}
+
+.round-event-odds-fill {
+  display: block;
+  height: 100%;
+}
+
+.round-event-odds-fill--team-a {
+  background: linear-gradient(90deg, rgba(80, 173, 231, 0.95) 0%, rgba(30, 127, 209, 0.95) 100%);
+}
+
+.round-event-odds-fill--team-b {
+  background: linear-gradient(90deg, rgba(255, 178, 89, 0.95) 0%, rgba(255, 127, 50, 0.95) 100%);
+}
+
+.round-event-odds-copy {
+  color: #547594 !important;
+  font-size: 0.68rem !important;
+}
+
 .round-event-tags {
   display: flex;
   flex-wrap: wrap;

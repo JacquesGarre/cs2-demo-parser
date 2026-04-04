@@ -2,9 +2,11 @@ package processing
 
 import (
 	"fmt"
+	"math"
 	"os"
 	"path/filepath"
 	"sort"
+	"strconv"
 	"strings"
 	"time"
 
@@ -436,6 +438,13 @@ func (a *CS2DemoAnalyzer) Analyze(demo entities.Demo) (entities.MatchSummary, er
 		mvpEvent.MatchState = currentMatchStateLabel(parser)
 		if mvpEvent.MatchState == "" && len(lastRound.Events) > 0 {
 			mvpEvent.MatchState = lastRound.Events[len(lastRound.Events)-1].MatchState
+		}
+		if lastRound.WinnerTeam == "CT" {
+			mvpEvent.CTWinProbability = 100
+			mvpEvent.TWinProbability = 0
+		} else if lastRound.WinnerTeam == "T" {
+			mvpEvent.CTWinProbability = 0
+			mvpEvent.TWinProbability = 100
 		}
 		lastRound.Events = append(lastRound.Events, mvpEvent)
 		sortRoundEventsInPlace(lastRound.Events)
@@ -1355,6 +1364,273 @@ func annotateRoundEventsWithMatchState(events []entities.RoundEvent, ctPlayers i
 	}
 }
 
+func annotateRoundEventsWithWinProbabilities(events []entities.RoundEvent, ctPlayers []entities.RoundPlayerMoney, tPlayers []entities.RoundPlayerMoney) {
+	if len(events) == 0 {
+		return
+	}
+
+	ctAlivePlayers := make(map[string]entities.RoundPlayerMoney, len(ctPlayers))
+	for _, player := range ctPlayers {
+		ctAlivePlayers[player.PlayerName] = player
+	}
+	tAlivePlayers := make(map[string]entities.RoundPlayerMoney, len(tPlayers))
+	for _, player := range tPlayers {
+		tAlivePlayers[player.PlayerName] = player
+	}
+
+	ctAlive := len(ctPlayers)
+	tAlive := len(tPlayers)
+	if ctAlive <= 0 {
+		ctAlive = 5
+	}
+	if tAlive <= 0 {
+		tAlive = 5
+	}
+
+	bombPlanted := false
+	bombDropped := false
+	defuseInProgress := false
+
+	sortRoundEventsInPlace(events)
+
+	for i := range events {
+		event := &events[i]
+		description := strings.ToLower(event.Description)
+
+		switch event.EventType {
+		case "kill":
+			applyKillToAliveState(*event, ctAlivePlayers, tAlivePlayers, &ctAlive, &tAlive)
+			if event.Team == "T" {
+				defuseInProgress = false
+			}
+		case "plant":
+			bombDropped = false
+			if !strings.Contains(description, "starting plant") {
+				bombPlanted = true
+			}
+		case "defuse":
+			if strings.Contains(description, "started defusing") {
+				defuseInProgress = true
+			}
+			if strings.Contains(description, "defused the bomb") {
+				bombPlanted = false
+				defuseInProgress = false
+			}
+		case "bomb":
+			switch {
+			case strings.Contains(description, "dropped the bomb"):
+				bombDropped = true
+			case strings.Contains(description, "picked up the bomb"):
+				bombDropped = false
+			case strings.Contains(description, "detonated the bomb"):
+				bombPlanted = false
+				defuseInProgress = false
+			}
+		case "result":
+			if event.Team == "CT" {
+				event.CTWinProbability = 100
+				event.TWinProbability = 0
+				event.MatchState = formatMatchStateLabel(tAlive, ctAlive)
+				continue
+			}
+			if event.Team == "T" {
+				event.CTWinProbability = 0
+				event.TWinProbability = 100
+				event.MatchState = formatMatchStateLabel(tAlive, ctAlive)
+				continue
+			}
+		}
+
+		event.MatchState = formatMatchStateLabel(tAlive, ctAlive)
+		event.CTWinProbability, event.TWinProbability = estimateRoundWinProbabilities(ctAlivePlayers, tAlivePlayers, ctAlive, tAlive, event.TimeLabel, bombPlanted, bombDropped, defuseInProgress)
+	}
+}
+
+func applyKillToAliveState(event entities.RoundEvent, ctAlivePlayers map[string]entities.RoundPlayerMoney, tAlivePlayers map[string]entities.RoundPlayerMoney, ctAlive *int, tAlive *int) {
+	target := strings.TrimSpace(event.TargetName)
+	if target != "" {
+		if _, ok := ctAlivePlayers[target]; ok {
+			delete(ctAlivePlayers, target)
+			if *ctAlive > 0 {
+				*ctAlive = *ctAlive - 1
+			}
+			return
+		}
+		if _, ok := tAlivePlayers[target]; ok {
+			delete(tAlivePlayers, target)
+			if *tAlive > 0 {
+				*tAlive = *tAlive - 1
+			}
+			return
+		}
+	}
+
+	switch event.Team {
+	case "T":
+		if *ctAlive > 0 {
+			*ctAlive = *ctAlive - 1
+		}
+		removeAnyAlivePlayer(ctAlivePlayers)
+	case "CT":
+		if *tAlive > 0 {
+			*tAlive = *tAlive - 1
+		}
+		removeAnyAlivePlayer(tAlivePlayers)
+	}
+}
+
+func removeAnyAlivePlayer(players map[string]entities.RoundPlayerMoney) {
+	for playerName := range players {
+		delete(players, playerName)
+		return
+	}
+}
+
+func estimateRoundWinProbabilities(ctAlivePlayers map[string]entities.RoundPlayerMoney, tAlivePlayers map[string]entities.RoundPlayerMoney, ctAlive int, tAlive int, timeLabel string, bombPlanted bool, bombDropped bool, defuseInProgress bool) (int, int) {
+	if ctAlive <= 0 && tAlive <= 0 {
+		return 50, 50
+	}
+	if tAlive <= 0 {
+		return 100, 0
+	}
+	if ctAlive <= 0 {
+		return 0, 100
+	}
+
+	ctScore := aliveTeamStrength(ctAlivePlayers, ctAlive, "CT")
+	tScore := aliveTeamStrength(tAlivePlayers, tAlive, "T")
+	timeLeft := parseRoundClockSeconds(timeLabel)
+
+	if bombPlanted {
+		tScore += 10
+		if timeLeft <= 25 {
+			tScore += 8
+		}
+		if timeLeft <= 15 {
+			tScore += 6
+		}
+		if defuseInProgress {
+			ctScore += 12
+		}
+	} else {
+		if timeLeft <= 35 {
+			ctScore += 2
+		}
+		if timeLeft <= 20 {
+			ctScore += 8
+		}
+		if timeLeft <= 10 {
+			ctScore += 10
+		}
+		if bombDropped {
+			ctScore += 5
+		}
+	}
+
+	total := ctScore + tScore
+	if total <= 0 {
+		return 50, 50
+	}
+
+	ctWin := int(math.Round((ctScore / total) * 100))
+	if ctWin < 0 {
+		ctWin = 0
+	}
+	if ctWin > 100 {
+		ctWin = 100
+	}
+	tWin := 100 - ctWin
+
+	if ctWin > 0 && tWin > 0 {
+		if ctWin < 5 {
+			ctWin, tWin = 5, 95
+		} else if tWin < 5 {
+			ctWin, tWin = 95, 5
+		}
+	}
+
+	return ctWin, tWin
+}
+
+func aliveTeamStrength(alivePlayers map[string]entities.RoundPlayerMoney, aliveCount int, team string) float64 {
+	if aliveCount <= 0 {
+		return 0
+	}
+
+	score := 0.0
+	counted := 0
+	for _, player := range alivePlayers {
+		score += playerWinStrength(player, team)
+		counted++
+	}
+	for counted < aliveCount {
+		score += playerWinStrength(entities.RoundPlayerMoney{}, team)
+		counted++
+	}
+	return score
+}
+
+func playerWinStrength(player entities.RoundPlayerMoney, team string) float64 {
+	score := 18.0
+	weapon := strings.ToLower(strings.TrimSpace(player.MainWeapon))
+	switch {
+	case weapon == "":
+		score += 2
+	case strings.Contains(weapon, "awp"):
+		score += 11
+	case strings.Contains(weapon, "ak-47"), strings.Contains(weapon, "m4a1"), strings.Contains(weapon, "m4a4"), strings.Contains(weapon, "aug"), strings.Contains(weapon, "sg 553"), strings.Contains(weapon, "famas"), strings.Contains(weapon, "galil"):
+		score += 8.5
+	case strings.Contains(weapon, "ssg 08"):
+		score += 7
+	case strings.Contains(weapon, "mac-10"), strings.Contains(weapon, "mp9"), strings.Contains(weapon, "mp7"), strings.Contains(weapon, "ump"), strings.Contains(weapon, "p90"):
+		score += 5.5
+	case strings.Contains(weapon, "nova"), strings.Contains(weapon, "xm1014"), strings.Contains(weapon, "mag-7"), strings.Contains(weapon, "sawed-off"), strings.Contains(weapon, "m249"), strings.Contains(weapon, "negev"):
+		score += 4.5
+	case strings.Contains(weapon, "deagle"), strings.Contains(weapon, "desert eagle"), strings.Contains(weapon, "tec-9"), strings.Contains(weapon, "five-seven"), strings.Contains(weapon, "cz75"), strings.Contains(weapon, "p250"):
+		score += 3
+	default:
+		score += 1.5
+	}
+
+	switch player.Armor {
+	case "Armor + Helmet":
+		score += 3.5
+	case "Armor":
+		score += 2
+	}
+
+	score += math.Min(float64(player.Utility), 4) * 0.45
+	if team == "CT" && strings.Contains(strings.ToLower(player.Armor), "helmet") {
+		score += 0.25
+	}
+
+	return score
+}
+
+func parseRoundClockSeconds(label string) int {
+	label = strings.TrimSpace(label)
+	if label == "" {
+		return defaultRoundTimeSeconds
+	}
+
+	parts := strings.Split(label, ":")
+	if len(parts) != 2 {
+		return defaultRoundTimeSeconds
+	}
+
+	minutes, errMin := strconv.Atoi(parts[0])
+	seconds, errSec := strconv.Atoi(parts[1])
+	if errMin != nil || errSec != nil {
+		return defaultRoundTimeSeconds
+	}
+
+	total := minutes*60 + seconds
+	if total < 0 {
+		return 0
+	}
+	return total
+}
+
 func isNoteworthyDamage(e events.PlayerHurt) bool {
 	if e.HealthDamageTaken >= 40 {
 		return true
@@ -1603,6 +1879,7 @@ func commitRoundAwards(state *roundState, players map[string]*playerAggregate, w
 
 	roundEvents := cloneRoundEvents(state.RoundEvents)
 	annotateRoundEventsWithMatchState(roundEvents, len(state.CTMoneyByPlayer), len(state.TMoneyByPlayer))
+	annotateRoundEventsWithWinProbabilities(roundEvents, state.CTMoneyByPlayer, state.TMoneyByPlayer)
 
 	state.RoundHistory = append(state.RoundHistory, entities.RoundSummary{
 		RoundNumber:     roundNumber,

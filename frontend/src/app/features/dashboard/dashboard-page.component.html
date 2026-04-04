@@ -182,6 +182,17 @@
                       <span class="round-event-time">{{ event.timeLabel || '1:55' }}</span>
                       <div class="round-event-body">
                         <p>{{ event.description }}</p>
+                        <div class="round-event-odds" *ngIf="hasRoundEventWinProbability(event)">
+                          <div class="round-event-odds-head">
+                            <span>{{ summaryData.teamAName }} {{ roundEventTeamAWinProbability(round, event) }}%</span>
+                            <span>{{ roundEventTeamBWinProbability(round, event) }}% {{ summaryData.teamBName }}</span>
+                          </div>
+                          <div class="round-event-odds-bar" [attr.aria-label]="roundEventOddsSummary(round, event, summaryData.teamAName, summaryData.teamBName)">
+                            <span class="round-event-odds-fill round-event-odds-fill--team-a" [style.width.%]="roundEventTeamAWinProbability(round, event)"></span>
+                            <span class="round-event-odds-fill round-event-odds-fill--team-b" [style.width.%]="roundEventTeamBWinProbability(round, event)"></span>
+                          </div>
+                          <p class="round-event-odds-copy">{{ roundEventOddsSummary(round, event, summaryData.teamAName, summaryData.teamBName) }}</p>
+                        </div>
                         <div class="round-event-tags">
                           <span class="round-event-state" *ngIf="event.matchState">{{ event.matchState }}</span>
                           <span>{{ event.eventType | titlecase }}</span>

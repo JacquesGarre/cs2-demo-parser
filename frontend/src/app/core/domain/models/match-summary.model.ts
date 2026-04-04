@@ -87,6 +87,8 @@ export interface RoundEvent {
   weapon?: string;
   site?: string;
   matchState?: string;
+  ctWinProbability?: number;
+  tWinProbability?: number;
   locationLabel?: string;
   x?: number;
   y?: number;
