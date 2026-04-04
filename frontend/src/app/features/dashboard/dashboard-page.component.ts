@@ -37,6 +37,14 @@ type PlayerDamageRound = {
   damage: number;
 };
 
+type StandoutRound = {
+  roundNumber: number;
+  side: 'CT' | 'T';
+  title: string;
+  details: string[];
+  score: number;
+};
+
 Chart.register(...registerables);
 
 @Component({
@@ -461,6 +469,87 @@ export class DashboardPageComponent implements OnInit, AfterViewInit, OnDestroy 
 
     const total = points.reduce((sum, point) => sum + point.damage, 0);
     return total / points.length;
+  }
+
+  get playerStandoutRounds(): StandoutRound[] {
+    const summary = this.summary();
+    const player = this.selectedPlayer();
+
+    if (!summary || !player) {
+      return [];
+    }
+
+    const standoutRounds: StandoutRound[] = [];
+
+    for (const round of summary.roundHistory) {
+      const details: string[] = [];
+      let title = 'Impact round';
+      let score = 0;
+
+      const multiKill = round.multiKills.find((entry) => entry.playerName === player.playerName);
+      const roundDamage = round.playerDamages?.find((entry) => entry.playerName === player.playerName)?.damage ?? 0;
+      const roundMvp = round.mvp?.playerName === player.playerName ? round.mvp : null;
+      const bestPlayer = round.bestPlayer?.playerName === player.playerName ? round.bestPlayer : null;
+
+      if (multiKill) {
+        title = multiKill.label;
+        details.push(`${multiKill.kills}K with ${multiKill.damage} damage`);
+        if (multiKill.killDetails && multiKill.killDetails.length > 0) {
+          const victims = multiKill.killDetails.map((kill) => `${kill.victimName} (${kill.weapon})`).join(', ');
+          details.push(`Eliminations: ${victims}`);
+        }
+        score += multiKill.kills * 40 + multiKill.damage;
+      }
+
+      if (roundMvp) {
+        if (title === 'Impact round') {
+          title = roundMvp.reason === 'Round MVP' ? 'Round MVP' : roundMvp.reason;
+        }
+
+        const normalizedReason = roundMvp.reason.trim().toLowerCase();
+        const isGenericMvpReason = normalizedReason === 'round mvp' || normalizedReason === 'most eliminations';
+
+        if (!multiKill && !isGenericMvpReason) {
+          details.push(roundMvp.reason);
+        }
+
+        if (!multiKill && (roundMvp.kills > 0 || roundMvp.damage > 0)) {
+          details.push(`${roundMvp.kills}K and ${roundMvp.damage} damage`);
+        }
+
+        score += 35 + roundMvp.damage + roundMvp.kills * 12;
+      }
+
+      if (bestPlayer && !roundMvp && !multiKill) {
+        title = 'Best of round';
+        details.push('Best player of the round');
+        score += 25 + bestPlayer.damage + bestPlayer.kills * 10;
+      }
+
+      const damageAlreadyMentioned = details.some((detail) => detail.includes(`${roundDamage} damage`));
+      if (roundDamage >= 100 && !damageAlreadyMentioned) {
+        details.push(`${roundDamage} damage dealt`);
+        score += roundDamage;
+      }
+
+      const uniqueDetails = Array.from(new Set(details));
+      if (uniqueDetails.length === 0) {
+        continue;
+      }
+
+      standoutRounds.push({
+        roundNumber: round.roundNumber,
+        side: player.team === this.teamASideForRound(round.roundNumber) ? 'CT' : 'T',
+        title,
+        details: uniqueDetails,
+        score,
+      });
+    }
+
+    return standoutRounds
+      .sort((a, b) => (b.score === a.score ? a.roundNumber - b.roundNumber : b.score - a.score))
+      .slice(0, 6)
+      .sort((a, b) => a.roundNumber - b.roundNumber);
   }
 
   private queueDamageChartRender(): void {

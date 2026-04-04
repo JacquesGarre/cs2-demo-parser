@@ -47,26 +47,19 @@ make local-clean   # Stop services and remove volumes
 
 ## TODOs
 
-### UI / Radar
-
 - [x] Fix Inferno radar minimap offset
 - [x] Remove a-b and map name from canvas, events rendered.
 - [x] Fix Nuke two-levels radar
 - [x] Fix first opening of drawer not selecting the proper player in dropdown
 - [x] Add ui tooltip over kills and death in radar to know which round and which side it happened, with the kill detail, who killed with which weapon, and which weapon the player who died had
-- [ ] Add minimap replay per round with utility + kills animation (2D top-down)
-- [ ] Add more players stats in the drawer (multikills) et "rounds phares"
+- [x] Add more players stats in the drawer (multikills) et "rounds phares"
 - [ ] Add a 404 page, and why reloading the page doesn't work?
-
-### Match Insights
-
-- [ ] Add FIFA-style player cards with ratings
 - [ ] Add deeper round analysis with timeline:
-   - Team average money per player
-   - Buy type classification (with tooltip details)
    - Team setup classification (rush, execute, hold, fake, etc.)
    - Round event timeline (entries, plants, clutches, saves, defuses)
    - Round ending context (plant/defuse/time), key fight zones, setups, clutches, entries, trades
+- [ ] Add minimap replay per round with utility + kills animation (2D top-down)
+- [ ] Add FIFA-style player cards with ratings
 - [ ] Add highlight video per player
 - [ ] Add highlight video per round
 - [ ] Add round win-odds estimation based on buys

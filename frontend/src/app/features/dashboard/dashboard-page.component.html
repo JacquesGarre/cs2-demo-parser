@@ -234,6 +234,22 @@
             <p>HS%</p>
             <strong>{{ player.hsPercentage.toFixed(1) }}%</strong>
           </article>
+          <article class="drawer-stat-card">
+            <p>2Ks</p>
+            <strong>{{ player.twoKs }}</strong>
+          </article>
+          <article class="drawer-stat-card">
+            <p>3Ks</p>
+            <strong>{{ player.threeKs }}</strong>
+          </article>
+          <article class="drawer-stat-card">
+            <p>4Ks</p>
+            <strong>{{ player.fourKs }}</strong>
+          </article>
+          <article class="drawer-stat-card">
+            <p>5Ks</p>
+            <strong>{{ player.fiveKs }}</strong>
+          </article>
         </div>
 
         <section class="damage-chart-card">
@@ -248,6 +264,31 @@
 
           <ng-template #noDamageData>
             <p class="damage-chart-empty">No round-by-round damage data available.</p>
+          </ng-template>
+        </section>
+
+        <section class="standout-rounds-card">
+          <div class="standout-rounds-head">
+            <h4>Key rounds</h4>
+          </div>
+
+          <div class="standout-rounds-list" *ngIf="playerStandoutRounds.length > 0; else noStandoutRounds">
+            <article class="standout-round" *ngFor="let standout of playerStandoutRounds">
+              <div class="standout-round-meta">
+                <strong>Round {{ standout.roundNumber }}</strong>
+                <span>{{ standout.title }}</span>
+              </div>
+              <p class="standout-round-side" [class.standout-round-side--ct]="standout.side === 'CT'" [class.standout-round-side--t]="standout.side === 'T'">
+                {{ standout.side }} side
+              </p>
+              <ul>
+                <li *ngFor="let detail of standout.details">{{ detail }}</li>
+              </ul>
+            </article>
+          </div>
+
+          <ng-template #noStandoutRounds>
+            <p class="standout-rounds-empty">No standout rounds detected for this player yet.</p>
           </ng-template>
         </section>
 
