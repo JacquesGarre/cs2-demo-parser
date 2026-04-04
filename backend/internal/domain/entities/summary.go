@@ -26,10 +26,18 @@ type PlayerSummary struct {
 }
 
 type HeatPoint struct {
-	X     float64 `json:"x"`
-	Y     float64 `json:"y"`
-	Z     float64 `json:"z,omitempty"`
-	Count int     `json:"count"`
+	X            float64 `json:"x"`
+	Y            float64 `json:"y"`
+	Z            float64 `json:"z,omitempty"`
+	Count        int     `json:"count"`
+	RoundNumber  int     `json:"roundNumber,omitempty"`
+	Side         string  `json:"side,omitempty"`
+	KillerSide   string  `json:"killerSide,omitempty"`
+	VictimSide   string  `json:"victimSide,omitempty"`
+	KillerName   string  `json:"killerName,omitempty"`
+	VictimName   string  `json:"victimName,omitempty"`
+	KillWeapon   string  `json:"killWeapon,omitempty"`
+	VictimWeapon string  `json:"victimWeapon,omitempty"`
 }
 
 type PlayerHeatmap struct {
@@ -39,11 +47,11 @@ type PlayerHeatmap struct {
 }
 
 type RoundPerformance struct {
-	PlayerName string `json:"playerName"`
-	Team       string `json:"team"`
-	Kills      int    `json:"kills"`
-	Damage     int    `json:"damage"`
-	Label      string `json:"label"`
+	PlayerName  string            `json:"playerName"`
+	Team        string            `json:"team"`
+	Kills       int               `json:"kills"`
+	Damage      int               `json:"damage"`
+	Label       string            `json:"label"`
 	KillDetails []RoundKillDetail `json:"killDetails,omitempty"`
 }
 

@@ -1,3 +1,40 @@
 <figure class="radar">
-  <canvas #canvas width="1024" height="1024" aria-label="CS2 radar heatmap"></canvas>
+  <canvas
+    #canvas
+    width="1024"
+    height="1024"
+    aria-label="CS2 radar heatmap"
+    (mousemove)="onCanvasPointerMove($event)"
+    (mouseleave)="clearHoveredPoint()"
+  ></canvas>
+
+  <div class="radar-tooltip" *ngIf="hoveredPoint as point" [style.left.px]="tooltipX" [style.top.px]="tooltipY">
+    <div class="radar-tooltip__title">
+      <strong>Round {{ point.roundNumber ?? '?' }}</strong>
+    </div>
+
+    <div class="radar-tooltip__row radar-tooltip__line">
+      <span
+        class="side-badge"
+        [class.side-badge--ct]="point.killerSide === 'CT'"
+        [class.side-badge--t]="point.killerSide === 'T'"
+      >
+        {{ point.killerSide ?? 'UNK' }}
+      </span>
+      <span>{{ point.killerName ?? 'World' }} ({{ point.killWeapon ?? 'Unknown' }})</span>
+    </div>
+
+    <div class="radar-tooltip__row radar-tooltip__verb">killed</div>
+
+    <div class="radar-tooltip__row radar-tooltip__line">
+      <span
+        class="side-badge"
+        [class.side-badge--ct]="point.victimSide === 'CT'"
+        [class.side-badge--t]="point.victimSide === 'T'"
+      >
+        {{ point.victimSide ?? 'UNK' }}
+      </span>
+      <span>{{ point.victimName ?? 'Unknown player' }} ({{ point.victimWeapon ?? 'Unknown' }})</span>
+    </div>
+  </div>
 </figure>

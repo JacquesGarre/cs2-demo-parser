@@ -257,7 +257,6 @@
             <button type="button" [class.active]="heatmapMode() === 'deaths'" (click)="setHeatmapMode('deaths')">Deaths</button>
           </div>
           <app-radar-minimap [mapName]="summaryData.mapName" [mode]="heatmapMode()" [points]="selectedHeatPoints"></app-radar-minimap>
-          <p class="heatmap-count">Events rendered: {{ selectedHeatPoints.length }}</p>
         </section>
       </div>
 

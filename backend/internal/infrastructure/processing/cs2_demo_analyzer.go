@@ -2,7 +2,6 @@ package processing
 
 import (
 	"fmt"
-	"math"
 	"os"
 	"path/filepath"
 	"sort"
@@ -16,12 +15,6 @@ import (
 )
 
 type CS2DemoAnalyzer struct{}
-
-type heatBin struct {
-	x int
-	y int
-	z int
-}
 
 type playerAggregate struct {
 	ID                   string
@@ -37,8 +30,8 @@ type playerAggregate struct {
 	BestRoundPlayerCount int
 	OpeningDuels         int
 	OpeningWins          int
-	KillBins             map[heatBin]int
-	DeathBins            map[heatBin]int
+	KillPoints           []entities.HeatPoint
+	DeathPoints          []entities.HeatPoint
 }
 
 type roundState struct {
@@ -228,7 +221,27 @@ func (a *CS2DemoAnalyzer) Analyze(demo entities.Demo) (entities.MatchSummary, er
 		}
 
 		victimAgg := upsertPlayer(players, e.Victim)
-		addBinnedPoint(victimAgg.DeathBins, float64(e.Victim.Position().X), float64(e.Victim.Position().Y), float64(e.Victim.Position().Z))
+		killerName := "World"
+		killerSide := "Unknown"
+		killerWeapon := "Unknown"
+		if e.Killer != nil {
+			killerName = safePlayerName(e.Killer)
+			killerSide = teamName(e.Killer.Team)
+			killerWeapon = playerWeaponLabel(e.Killer)
+		}
+		victimWeapon := playerWeaponLabel(e.Victim)
+		victimAgg.DeathPoints = append(victimAgg.DeathPoints, newHeatPoint(
+			state.CurrentRound,
+			killerSide,
+			teamName(e.Victim.Team),
+			float64(e.Victim.Position().X),
+			float64(e.Victim.Position().Y),
+			float64(e.Victim.Position().Z),
+			killerName,
+			safePlayerName(e.Victim),
+			killerWeapon,
+			victimWeapon,
+		))
 
 		if e.Killer == nil {
 			return
@@ -249,7 +262,18 @@ func (a *CS2DemoAnalyzer) Analyze(demo entities.Demo) (entities.MatchSummary, er
 			VictimName: safePlayerName(e.Victim),
 			Weapon:     killWeaponLabel(e),
 		})
-		addBinnedPoint(killerAgg.KillBins, float64(e.Victim.Position().X), float64(e.Victim.Position().Y), float64(e.Victim.Position().Z))
+		killerAgg.KillPoints = append(killerAgg.KillPoints, newHeatPoint(
+			state.CurrentRound,
+			killerSide,
+			teamName(e.Victim.Team),
+			float64(e.Victim.Position().X),
+			float64(e.Victim.Position().Y),
+			float64(e.Victim.Position().Z),
+			safePlayerName(e.Killer),
+			safePlayerName(e.Victim),
+			killerWeapon,
+			victimWeapon,
+		))
 		if e.IsHeadshot {
 			killerAgg.HeadshotKills++
 		}
@@ -402,8 +426,10 @@ func (a *CS2DemoAnalyzer) Analyze(demo entities.Demo) (entities.MatchSummary, er
 			hsPercentage = (float64(aggregate.HeadshotKills) / float64(player.Kills())) * 100
 		}
 
-		killHeat := binsToHeatPoints(aggregate.KillBins)
-		deathHeat := binsToHeatPoints(aggregate.DeathBins)
+		killHeat := cloneHeatPoints(aggregate.KillPoints)
+		deathHeat := cloneHeatPoints(aggregate.DeathPoints)
+		sortHeatPoints(killHeat)
+		sortHeatPoints(deathHeat)
 
 		playerStats = append(playerStats, entities.PlayerSummary{
 			PlayerName:           safePlayerName(player),
@@ -450,6 +476,8 @@ func (a *CS2DemoAnalyzer) Analyze(demo entities.Demo) (entities.MatchSummary, er
 	sort.Slice(playerHeatmaps, func(i, j int) bool {
 		return playerHeatmaps[i].PlayerName < playerHeatmaps[j].PlayerName
 	})
+	sortHeatPoints(aggregatedKills)
+	sortHeatPoints(aggregatedDeaths)
 
 	// Team A/B are anchored to scoreboard mapping where Team A score equals final CT score.
 	// Keep names aligned with that same anchor to avoid team-name/player/score inversion.
@@ -493,12 +521,12 @@ func (a *CS2DemoAnalyzer) Analyze(demo entities.Demo) (entities.MatchSummary, er
 func inferMapName(fileName string) string {
 	// Extract the actual filename from path
 	base := strings.ToLower(filepath.Base(fileName))
-	
+
 	// Remove common file extensions first to avoid confusion
 	base = strings.TrimSuffix(base, ".dem")
 	base = strings.TrimSuffix(base, ".dem.bz2")
 	base = strings.TrimSuffix(base, ".dem.zip")
-	
+
 	// Map keywords to full map names, ordered by specificity (longest first to catch multi-word variations)
 	// Check more specific names first to avoid false positives
 	mapMappings := []struct {
@@ -530,10 +558,10 @@ func normalizeMapName(name string) string {
 	// The demo parser might return map names like "Ancient", "de_ancient", or "ancient"
 	// Convert to our standard format: "de_<mapname>"
 	base := strings.ToLower(strings.TrimSpace(name))
-	
+
 	// Remove "de_" prefix if it exists
 	base = strings.TrimPrefix(base, "de_")
-	
+
 	// Map known map keywords
 	mapKeywords := map[string]string{
 		"ancient":  "de_ancient",
@@ -545,11 +573,11 @@ func normalizeMapName(name string) string {
 		"nuke":     "de_nuke",
 		"mirage":   "de_mirage",
 	}
-	
+
 	if fullName, ok := mapKeywords[base]; ok {
 		return fullName
 	}
-	
+
 	// Fallback: if it didn't match, return as-is with de_ prefix
 	return "de_" + base
 }
@@ -563,11 +591,11 @@ func upsertPlayer(items map[string]*playerAggregate, player *common.Player) *pla
 	}
 
 	created := &playerAggregate{
-		ID:         id,
-		PlayerName: safePlayerName(player),
-		Team:       teamName(player.Team),
-		KillBins:   map[heatBin]int{},
-		DeathBins:  map[heatBin]int{},
+		ID:          id,
+		PlayerName:  safePlayerName(player),
+		Team:        teamName(player.Team),
+		KillPoints:  make([]entities.HeatPoint, 0),
+		DeathPoints: make([]entities.HeatPoint, 0),
 	}
 	items[id] = created
 	return created
@@ -601,31 +629,68 @@ func teamName(team common.Team) string {
 	}
 }
 
-func addBinnedPoint(target map[heatBin]int, x float64, y float64, z float64) {
-	const gridSize = 64.0
-	const verticalGridSize = 64.0
-
-	key := heatBin{
-		x: int(math.Floor(x/gridSize) * gridSize),
-		y: int(math.Floor(y/gridSize) * gridSize),
-		z: int(math.Floor(z/verticalGridSize) * verticalGridSize),
+func playerWeaponLabel(player *common.Player) string {
+	if player == nil {
+		return "Unknown"
 	}
-	target[key]++
+
+	bestName := ""
+	bestPriority := -1
+	for _, weapon := range player.Weapons() {
+		if weapon == nil {
+			continue
+		}
+
+		class := weapon.Class()
+		if class == common.EqClassUnknown || class == common.EqClassGrenade || class == common.EqClassEquipment {
+			continue
+		}
+
+		name := strings.TrimSpace(weapon.String())
+		if name == "" || name == "Unknown" {
+			continue
+		}
+
+		priority := classPriority(class)
+		if priority > bestPriority {
+			bestPriority = priority
+			bestName = name
+		}
+	}
+
+	if bestName != "" {
+		return bestName
+	}
+
+	return "Unknown"
 }
 
-func binsToHeatPoints(items map[heatBin]int) []entities.HeatPoint {
-	points := make([]entities.HeatPoint, 0, len(items))
-	for key, count := range items {
-		points = append(points, entities.HeatPoint{
-			X:     float64(key.x),
-			Y:     float64(key.y),
-			Z:     float64(key.z),
-			Count: count,
-		})
+func newHeatPoint(roundNumber int, killerSide string, victimSide string, x float64, y float64, z float64, killerName string, victimName string, killWeapon string, victimWeapon string) entities.HeatPoint {
+	return entities.HeatPoint{
+		X:            x,
+		Y:            y,
+		Z:            z,
+		Count:        1,
+		RoundNumber:  roundNumber,
+		Side:         killerSide,
+		KillerSide:   killerSide,
+		VictimSide:   victimSide,
+		KillerName:   killerName,
+		VictimName:   victimName,
+		KillWeapon:   killWeapon,
+		VictimWeapon: victimWeapon,
 	}
+}
 
+func cloneHeatPoints(points []entities.HeatPoint) []entities.HeatPoint {
+	cloned := make([]entities.HeatPoint, len(points))
+	copy(cloned, points)
+	return cloned
+}
+
+func sortHeatPoints(points []entities.HeatPoint) {
 	sort.Slice(points, func(i, j int) bool {
-		if points[i].Count == points[j].Count {
+		if points[i].RoundNumber == points[j].RoundNumber {
 			if points[i].X == points[j].X {
 				if points[i].Y == points[j].Y {
 					return points[i].Z < points[j].Z
@@ -634,9 +699,8 @@ func binsToHeatPoints(items map[heatBin]int) []entities.HeatPoint {
 			}
 			return points[i].X < points[j].X
 		}
-		return points[i].Count > points[j].Count
+		return points[i].RoundNumber < points[j].RoundNumber
 	})
-	return points
 }
 
 func maxRound(a int, b int) int {
@@ -690,11 +754,11 @@ func commitRoundAwards(state *roundState, players map[string]*playerAggregate, w
 		if kills >= 2 {
 			killDetails := state.RoundKillDetails[id]
 			multiKills = append(multiKills, entities.RoundPerformance{
-				PlayerName: aggregate.PlayerName,
-				Team:       aggregate.Team,
-				Kills:      kills,
-				Damage:     state.RoundDamage[id],
-				Label:      multiKillLabel(kills),
+				PlayerName:  aggregate.PlayerName,
+				Team:        aggregate.Team,
+				Kills:       kills,
+				Damage:      state.RoundDamage[id],
+				Label:       multiKillLabel(kills),
 				KillDetails: killDetails,
 			})
 		}

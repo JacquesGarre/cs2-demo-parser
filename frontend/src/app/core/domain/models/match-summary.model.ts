@@ -28,6 +28,14 @@ export interface HeatPoint {
   y: number;
   z?: number;
   count: number;
+  roundNumber?: number;
+  side?: string;
+  killerSide?: string;
+  victimSide?: string;
+  killerName?: string;
+  victimName?: string;
+  killWeapon?: string;
+  victimWeapon?: string;
 }
 
 export interface PlayerHeatmap {

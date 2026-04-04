@@ -49,10 +49,11 @@ make local-clean   # Stop services and remove volumes
 
 ### UI / Radar
 
-- [ ] Fix Inferno radar minimap offset
+- [x] Fix Inferno radar minimap offset
+- [x] Remove a-b and map name from canvas, events rendered.
 - [x] Fix Nuke two-levels radar
 - [x] Fix first opening of drawer not selecting the proper player in dropdown
-- [ ] Add ui tooltip over kills and death in radar to know which round and which side it happened
+- [x] Add ui tooltip over kills and death in radar to know which round and which side it happened, with the kill detail, who killed with which weapon, and which weapon the player who died had
 - [ ] Add minimap replay per round with utility + kills animation (2D top-down)
 - [ ] Add more players stats in the drawer (multikills) et "rounds phares"
 - [ ] Add a 404 page, and why reloading the page doesn't work?
@@ -72,3 +73,6 @@ make local-clean   # Stop services and remove volumes
 - [ ] Add user accounts, team creation, store demos per team to get an average win %
 - [ ] For teams, name tactics, and see the % of wins over maps and rounds
 - [ ] Wire faceit demos directly
+- [ ] Improve the landing page, count of analysed demos, number of players analysed, number of kills detailed, number of rounds analysed, description of the full app
+- [ ] Round analysis, show a bar like chess.com to know what is the advantage (odds of winning the round) during playing the round
+- [ ] About page with details

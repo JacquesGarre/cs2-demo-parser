@@ -15,13 +15,20 @@ type RadarMeta = {
   resolution: number;
   offset: { x: number; y: number };
   splits: RadarSplit[];
+  advisoryPosition?: { x: number; y: number };
+  zRange?: { min: number; max: number };
 };
 type RadarSplit = {
   bounds?: { top: number; bottom: number };
   offset: { x: number; y: number };
   zRange?: { min: number; max: number };
 };
-type RadarCrop = { left: number; top: number; width: number; height: number };
+type RenderedHeatPoint = {
+  point: HeatPoint;
+  x: number;
+  y: number;
+  radius: number;
+};
 
 const MAP_BOUNDS: Record<string, Bounds> = {
   de_mirage: { minX: -3230, maxX: 1913, minY: -3400, maxY: 1713 },
@@ -45,10 +52,14 @@ export class RadarMinimapComponent implements AfterViewInit, OnChanges {
 
   private readonly imageCache = new Map<string, HTMLImageElement | null>();
   private readonly metaCache = new Map<string, RadarMeta | null>();
-  private readonly cropCache = new Map<string, RadarCrop | null>();
   private readonly pendingImageLoads = new Set<string>();
   private readonly pendingMetaLoads = new Set<string>();
   private readonly radarMetaBaseSize = 1024;
+  private readonly renderedPoints: RenderedHeatPoint[] = [];
+
+  hoveredPoint: HeatPoint | null = null;
+  tooltipX = 0;
+  tooltipY = 0;
 
   ngAfterViewInit(): void {
     this.draw();
@@ -80,9 +91,8 @@ export class RadarMinimapComponent implements AfterViewInit, OnChanges {
     ctx.clearRect(0, 0, width, height);
 
     const meta = this.metaCache.get(mapKey) ?? null;
-    const crop = this.cropCache.get(mapKey) ?? null;
     const bounds = MAP_BOUNDS[mapKey] ?? MAP_BOUNDS['de_mirage'];
-    const maxCount = Math.max(1, ...this.points.map((point) => point.count));
+    this.renderedPoints.length = 0;
 
     this.drawRadarBackground(ctx, width, height, mapKey);
 
@@ -91,15 +101,9 @@ export class RadarMinimapComponent implements AfterViewInit, OnChanges {
       let y = 0;
 
       if (meta) {
-        // Meta calibration is defined in a fixed 1024px radar space.
         const projected = this.projectWithRadarMeta(point, meta);
         x = projected.x;
         y = projected.y;
-
-        if (crop) {
-          x -= crop.left;
-          y -= crop.top;
-        }
       } else {
         const normalizedX = (point.x - bounds.minX) / (bounds.maxX - bounds.minX);
         const normalizedY = (point.y - bounds.minY) / (bounds.maxY - bounds.minY);
@@ -110,45 +114,34 @@ export class RadarMinimapComponent implements AfterViewInit, OnChanges {
       x = Math.max(0, Math.min(width, x));
       y = Math.max(0, Math.min(height, y));
 
-      const intensity = point.count / maxCount;
-      const baseRadius = Math.max(2, Math.min(width, height) * 0.0055);
-      const radius = baseRadius + baseRadius * 3.2 * intensity;
-      const color =
+      const radius = 15;
+      const alpha = Math.min(0.82, 0.58 + Math.log(point.count + 1) * 0.06);
+      const fillColor =
         this.mode === 'kills'
-          ? `rgba(220, 53, 69, ${0.25 + intensity * 0.45})`
-          : `rgba(46, 134, 222, ${0.25 + intensity * 0.45})`;
+          ? `rgba(255, 99, 132, ${alpha})`
+          : `rgba(77, 171, 247, ${alpha})`;
+      const strokeColor =
+        this.mode === 'kills'
+          ? 'rgba(255, 189, 201, 0.95)'
+          : 'rgba(196, 230, 255, 0.95)';
 
       ctx.beginPath();
-      ctx.fillStyle = color;
+      ctx.fillStyle = fillColor;
       ctx.arc(x, y, radius, 0, Math.PI * 2);
       ctx.fill();
+      ctx.lineWidth = 1.4;
+      ctx.strokeStyle = strokeColor;
+      ctx.stroke();
+      this.renderedPoints.push({ point, x, y, radius });
     }
   }
 
   private drawRadarBackground(ctx: CanvasRenderingContext2D, width: number, height: number, mapKey: string): void {
     const radarImage = this.imageCache.get(mapKey);
-    const crop = this.cropCache.get(mapKey) ?? null;
     if (radarImage && radarImage.complete && radarImage.naturalWidth > 0) {
-      if (crop) {
-        const scaleX = radarImage.naturalWidth / this.radarMetaBaseSize;
-        const scaleY = radarImage.naturalHeight / this.radarMetaBaseSize;
-        ctx.drawImage(
-          radarImage,
-          crop.left * scaleX,
-          crop.top * scaleY,
-          crop.width * scaleX,
-          crop.height * scaleY,
-          0,
-          0,
-          width,
-          height,
-        );
-      } else {
-        ctx.drawImage(radarImage, 0, 0, width, height);
-      }
+      ctx.drawImage(radarImage, 0, 0, width, height);
       ctx.fillStyle = 'rgba(6, 15, 25, 0.22)';
       ctx.fillRect(0, 0, width, height);
-      this.drawMapLabels(ctx, width, height, mapKey);
       return;
     }
 
@@ -172,26 +165,57 @@ export class RadarMinimapComponent implements AfterViewInit, OnChanges {
     }
   }
 
-  private syncCanvasSize(canvas: HTMLCanvasElement, mapKey: string): void {
-    const radarImage = this.imageCache.get(mapKey);
-    const hasValidImage = !!radarImage && radarImage.complete && radarImage.naturalWidth > 0 && radarImage.naturalHeight > 0;
-    const hasMeta = this.metaCache.get(mapKey) !== null && this.metaCache.has(mapKey);
-    const crop = this.cropCache.get(mapKey) ?? null;
-
-    const targetWidth = hasMeta ? Math.round(crop?.width ?? this.radarMetaBaseSize) : hasValidImage ? radarImage.naturalWidth : 1024;
-    const targetHeight = hasMeta ? Math.round(crop?.height ?? this.radarMetaBaseSize) : hasValidImage ? radarImage.naturalHeight : 1024;
-
-    if (canvas.width !== targetWidth || canvas.height !== targetHeight) {
-      canvas.width = targetWidth;
-      canvas.height = targetHeight;
+  private syncCanvasSize(canvas: HTMLCanvasElement, _mapKey: string): void {
+    if (canvas.width !== this.radarMetaBaseSize || canvas.height !== this.radarMetaBaseSize) {
+      canvas.width = this.radarMetaBaseSize;
+      canvas.height = this.radarMetaBaseSize;
     }
+  }
+
+  onCanvasPointerMove(event: MouseEvent): void {
+    const canvas = this.canvasRef?.nativeElement;
+    if (!canvas || this.renderedPoints.length === 0) {
+      this.hoveredPoint = null;
+      return;
+    }
+
+    const rect = canvas.getBoundingClientRect();
+    const pointerX = (event.clientX - rect.left) * (canvas.width / rect.width);
+    const pointerY = (event.clientY - rect.top) * (canvas.height / rect.height);
+
+    let nearest: RenderedHeatPoint | null = null;
+    let nearestDistance = Number.POSITIVE_INFINITY;
+
+    for (const rendered of this.renderedPoints) {
+      const hitRadius = rendered.radius + 8;
+      const dx = pointerX - rendered.x;
+      const dy = pointerY - rendered.y;
+      const distance = dx * dx + dy * dy;
+
+      if (distance <= hitRadius * hitRadius && distance < nearestDistance) {
+        nearest = rendered;
+        nearestDistance = distance;
+      }
+    }
+
+    if (!nearest) {
+      this.hoveredPoint = null;
+      return;
+    }
+
+    this.hoveredPoint = nearest.point;
+    this.tooltipX = Math.min(Math.max(12, event.clientX - rect.left + 14), Math.max(12, rect.width - 270));
+    this.tooltipY = Math.min(Math.max(12, event.clientY - rect.top + 14), Math.max(12, rect.height - 130));
+  }
+
+  clearHoveredPoint(): void {
+    this.hoveredPoint = null;
   }
 
   private loadRadarImage(mapKey: string): void {
     const fromRadars = new Image();
     fromRadars.onload = () => {
       this.imageCache.set(mapKey, fromRadars);
-      this.cropCache.set(mapKey, this.computeRadarCrop(fromRadars));
       this.pendingImageLoads.delete(mapKey);
       this.draw();
     };
@@ -199,13 +223,11 @@ export class RadarMinimapComponent implements AfterViewInit, OnChanges {
       const fallback = new Image();
       fallback.onload = () => {
         this.imageCache.set(mapKey, fallback);
-        this.cropCache.set(mapKey, null);
         this.pendingImageLoads.delete(mapKey);
         this.draw();
       };
       fallback.onerror = () => {
         this.imageCache.set(mapKey, null);
-        this.cropCache.set(mapKey, null);
         this.pendingImageLoads.delete(mapKey);
         this.draw();
       };
@@ -216,7 +238,7 @@ export class RadarMinimapComponent implements AfterViewInit, OnChanges {
 
   private async loadRadarMeta(mapKey: string): Promise<void> {
     try {
-      const response = await fetch(`/radars/${mapKey}/meta.json5`, { cache: 'force-cache' });
+      const response = await fetch(`/radars/${mapKey}/meta.json5`, { cache: 'no-cache' });
       if (!response.ok) {
         this.metaCache.set(mapKey, null);
         return;
@@ -235,14 +257,24 @@ export class RadarMinimapComponent implements AfterViewInit, OnChanges {
         return;
       }
 
-      this.metaCache.set(mapKey, {
+      const normalizedMeta: RadarMeta = {
         resolution: parsed.resolution,
         offset: {
           x: parsed.offset.x,
           y: parsed.offset.y,
         },
         splits: this.parseRadarSplits(parsed.splits),
-      });
+        advisoryPosition:
+          parsed.advisoryPosition && typeof parsed.advisoryPosition.x === 'number' && typeof parsed.advisoryPosition.y === 'number'
+            ? { x: parsed.advisoryPosition.x, y: parsed.advisoryPosition.y }
+            : undefined,
+        zRange:
+          parsed.zRange && typeof parsed.zRange.min === 'number' && typeof parsed.zRange.max === 'number'
+            ? { min: parsed.zRange.min, max: parsed.zRange.max }
+            : undefined,
+      };
+
+      this.metaCache.set(mapKey, normalizedMeta);
     } catch {
       this.metaCache.set(mapKey, null);
     } finally {
@@ -279,24 +311,11 @@ export class RadarMinimapComponent implements AfterViewInit, OnChanges {
       return null;
     }
 
-    const pointWithZ = point as HeatPoint & { z?: number };
-    const hasPointZ = typeof pointWithZ.z === 'number';
-
-    if (hasPointZ) {
-      for (const split of splits) {
-        if (this.matchesSplitZ(pointWithZ.z as number, split.zRange)) {
-          return split;
-        }
-      }
-    }
-
     for (const split of splits) {
-      if (split.zRange) {
-        // If split has an explicit zRange but point has no z, skip bounds fallback to avoid false floor matches.
-        continue;
-      }
+      const matchesBounds = split.bounds ? this.matchesSplitBounds(point.y, split.bounds) : true;
+      const matchesZ = split.zRange ? typeof point.z === 'number' && this.matchesSplitZ(point.z, split.zRange) : true;
 
-      if (this.matchesSplitBounds(point.y, split.bounds)) {
+      if (matchesBounds && matchesZ && (split.bounds || split.zRange)) {
         return split;
       }
     }
@@ -373,55 +392,6 @@ export class RadarMinimapComponent implements AfterViewInit, OnChanges {
     return splits;
   }
 
-  private computeRadarCrop(image: HTMLImageElement): RadarCrop | null {
-    if (!image.naturalWidth || !image.naturalHeight) {
-      return null;
-    }
-
-    const probe = document.createElement('canvas');
-    probe.width = image.naturalWidth;
-    probe.height = image.naturalHeight;
-
-    const ctx = probe.getContext('2d', { willReadFrequently: true });
-    if (!ctx) {
-      return null;
-    }
-
-    ctx.drawImage(image, 0, 0);
-    const { data, width, height } = ctx.getImageData(0, 0, probe.width, probe.height);
-
-    let minX = width;
-    let minY = height;
-    let maxX = -1;
-    let maxY = -1;
-
-    for (let y = 0; y < height; y++) {
-      for (let x = 0; x < width; x++) {
-        const alpha = data[(y * width + x) * 4 + 3];
-        if (alpha === 0) {
-          continue;
-        }
-        if (x < minX) minX = x;
-        if (y < minY) minY = y;
-        if (x > maxX) maxX = x;
-        if (y > maxY) maxY = y;
-      }
-    }
-
-    if (maxX < minX || maxY < minY) {
-      return null;
-    }
-
-    const scaleX = image.naturalWidth / this.radarMetaBaseSize;
-    const scaleY = image.naturalHeight / this.radarMetaBaseSize;
-    return {
-      left: minX / scaleX,
-      top: minY / scaleY,
-      width: (maxX - minX + 1) / scaleX,
-      height: (maxY - minY + 1) / scaleY,
-    };
-  }
-
   private drawFallbackBackground(ctx: CanvasRenderingContext2D, width: number, height: number, mapKey: string): void {
     const gradient = ctx.createLinearGradient(0, 0, width, height);
     gradient.addColorStop(0, '#1f2b37');
@@ -444,17 +414,6 @@ export class RadarMinimapComponent implements AfterViewInit, OnChanges {
       ctx.stroke();
     }
 
-    this.drawMapLabels(ctx, width, height, mapKey);
-  }
-
-  private drawMapLabels(ctx: CanvasRenderingContext2D, width: number, height: number, mapKey: string): void {
-    ctx.fillStyle = 'rgba(255, 255, 255, 0.85)';
-    ctx.font = 'bold 16px Segoe UI';
-    ctx.fillText('A', width - 34, 26);
-    ctx.fillText('B', 18, height - 16);
-    ctx.font = '12px Segoe UI';
-    ctx.fillStyle = 'rgba(255, 255, 255, 0.7)';
-    ctx.fillText(mapKey, 16, 22);
   }
 
   private normalizeMapKey(mapName: string): string {

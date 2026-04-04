@@ -1,4 +1,5 @@
 .radar {
+  position: relative;
   margin: 0;
   border: 1px solid #35526f;
   border-radius: 12px;
@@ -10,4 +11,72 @@ canvas {
   width: 100%;
   height: auto;
   display: block;
+}
+
+.radar-tooltip {
+  position: absolute;
+  z-index: 2;
+  max-width: 320px;
+  padding: 0.6rem 0.7rem;
+  border: 1px solid rgba(120, 162, 198, 0.55);
+  border-radius: 10px;
+  background: rgba(9, 16, 24, 0.96);
+  color: #e8f0f8;
+  box-shadow: 0 10px 24px rgba(0, 0, 0, 0.28);
+  pointer-events: none;
+  transform: translate(0, 0);
+}
+
+.radar-tooltip__title {
+  margin-bottom: 0.35rem;
+  font-size: 0.82rem;
+}
+
+.radar-tooltip__row {
+  font-size: 0.78rem;
+  line-height: 1.4;
+}
+
+.radar-tooltip__line {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.35rem;
+}
+
+.radar-tooltip__verb {
+  margin: 0.18rem 0;
+  font-size: 0.74rem;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: #c6d6e7;
+}
+
+.side-badge {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 2rem;
+  padding: 0.1rem 0.4rem;
+  border-radius: 999px;
+  font-size: 0.72rem;
+  font-weight: 700;
+  letter-spacing: 0.02em;
+  background: rgba(120, 126, 134, 0.35);
+  color: #f4f7fb;
+}
+
+.side-badge--ct {
+  background: rgba(77, 171, 247, 0.28);
+  color: #7dccff;
+}
+
+.side-badge--t {
+  background: rgba(255, 107, 107, 0.24);
+  color: #ff8f8f;
+}
+
+.radar-tooltip__row + .radar-tooltip__row {
+  margin-top: 0.22rem;
 }
